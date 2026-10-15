@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { fetchProfile, saveProfile, type AppProfile } from './api';
 import { supabase } from './supabaseClient';
@@ -12,24 +12,93 @@ export interface AuthState {
   signOut: () => Promise<void>;
 }
 
+const PROFILE_CACHE_KEY = 'prohori-profile-cache';
+
+function loadCachedProfile(): AppProfile | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && typeof (parsed as AppProfile).id === 'string'
+      ? (parsed as AppProfile)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedProfile(profile: AppProfile | null): void {
+  try {
+    if (profile) localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile));
+    else localStorage.removeItem(PROFILE_CACHE_KEY);
+  } catch {
+    // Storage full or blocked — the in-memory profile still works.
+  }
+}
+
 export function useAuthState(): AuthState {
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<AppProfile | null>(null);
+  // Stale-while-revalidate: start from the cached profile so a returning
+  // user never stares at the "যাচাই হচ্ছে" gate while the API cold-starts.
+  const [profile, setProfile] = useState<AppProfile | null>(() => loadCachedProfile());
   const [loading, setLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const sessionRef = useRef<Session | null>(null);
+  const handledTokenRef = useRef<string | null>(null);
+
+  // Fetch the profile from the API. On success the result is cached; on
+  // failure the currently shown (cached) profile is KEPT — a slow or cold
+  // backend must never wipe the session UI back to a loading gate.
+  const runRefresh = async (sess: Session, silent: boolean): Promise<AppProfile | null> => {
+    if (!silent) setProfileLoading(true);
+    try {
+      const response = await fetchProfile();
+      setProfile(response.profile);
+      saveCachedProfile(response.profile);
+      return response.profile;
+    } catch {
+      const fallback = loadCachedProfile();
+      setProfile((prev) => prev ?? fallback);
+      return fallback;
+    } finally {
+      if (!silent) setProfileLoading(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (mounted) {
-        setProfileLoading(!!nextSession);
-        setSession(nextSession);
+    const applySession = (nextSession: Session | null) => {
+      sessionRef.current = nextSession;
+      setSession(nextSession);
+      if (!nextSession) {
+        handledTokenRef.current = null;
+        setProfile(null);
+        setProfileLoading(false);
+        saveCachedProfile(null);
+        return;
       }
+      // onAuthStateChange fires INITIAL_SESSION and getSession() resolves
+      // right after — handle each access token only once.
+      if (nextSession.access_token === handledTokenRef.current) return;
+      handledTokenRef.current = nextSession.access_token;
+      if (loadCachedProfile()) {
+        // Returning user: show the cached profile instantly, no gate;
+        // revalidate quietly in the background.
+        setProfile((prev) => prev ?? loadCachedProfile());
+        setProfileLoading(false);
+        void runRefresh(nextSession, true);
+      } else {
+        // First login (or cleared storage): the gate is honest here.
+        setProfileLoading(true);
+        void runRefresh(nextSession, false);
+      }
+    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (mounted) applySession(nextSession);
     });
     void supabase.auth.getSession().then(({ data }) => {
       if (mounted) {
-        setProfileLoading(!!data.session);
-        setSession(data.session);
+        applySession(data.session);
         setLoading(false);
       }
     });
@@ -37,40 +106,31 @@ export function useAuthState(): AuthState {
       mounted = false;
       subscription.unsubscribe();
     };
+    // runRefresh only uses setState + module-level helpers, so it is
+    // stable across renders; the effect intentionally runs once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refreshProfile = async (): Promise<AppProfile | null> => {
-    if (!session) {
+    const sess = sessionRef.current;
+    if (!sess) {
       setProfile(null);
-      return null;
-    }
-    setProfileLoading(true);
-    try {
-      const response = await fetchProfile();
-      setProfile(response.profile);
-      return response.profile;
-    } catch {
-      setProfile(null);
-      return null;
-    } finally {
       setProfileLoading(false);
+      return null;
     }
+    return runRefresh(sess, false);
   };
 
-  useEffect(() => {
-    if (!session) {
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      sessionRef.current = null;
+      handledTokenRef.current = null;
       setProfile(null);
       setProfileLoading(false);
-      return;
+      saveCachedProfile(null);
     }
-    void refreshProfile();
-    // The access token changes on refresh; re-fetch the profile with the new token.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.access_token]);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setProfile(null);
   };
 
   return { session, profile, loading, profileLoading, refreshProfile, signOut };
