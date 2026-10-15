@@ -114,3 +114,26 @@ export async function requireModerator(req: Request, res: Response, next: NextFu
     next(error);
   }
 }
+
+/** Require a profile with the admin role (server-side). Admin role can never
+ *  be granted through the API — it is set directly in the database. */
+export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.authIdentity) {
+    res.status(401).json({ error: 'sign in required' });
+    return;
+  }
+  try {
+    const [profile] = await db
+      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role })
+      .from(users)
+      .where(eq(users.id, req.authIdentity.id));
+    if (!profile || profile.role !== 'admin') {
+      res.status(403).json({ error: 'admin permission required' });
+      return;
+    }
+    req.appProfile = profile;
+    next();
+  } catch (error) {
+    next(error);
+  }
+}

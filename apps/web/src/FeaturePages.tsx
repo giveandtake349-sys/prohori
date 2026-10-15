@@ -1,12 +1,15 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   corroborateReport,
   createReport,
   createTeam,
+  fetchAdminUsers,
   fetchDivisions,
   fetchDistricts,
   fetchEmergencyContacts,
-  checkFraudNumber,
+  fetchModerationStats,
+  fetchNearbySummary,
+  fetchReportHistory,
   fetchModerationQueue,
   fetchReportByTrackingId,
   fetchReports,
@@ -15,19 +18,26 @@ import {
   joinTeam,
   moderateReport,
   reportFraudNumber,
+  checkFraudNumber,
   sendSos,
+  setUserRole,
   submitActionClaim,
+  type AdminUser,
   type AppProfile,
   type District,
   type Division,
   type EmergencyContacts,
   type FeedReport,
   type FraudCheck,
+  type ModerationStats,
+  type NearbySummary,
   type ReportDetail,
+  type ReportHistory,
   type Team,
   type Thana,
 } from './api';
 import { CATEGORY_BN, CATEGORY_KEYS, STATUS_BN, TIER_BN } from './labels';
+import MapPicker from './MapPicker';
 
 function timeAgo(iso: string): string {
   const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -326,6 +336,43 @@ function LocationSelectors({
   );
 }
 
+// 30-day verified crime history near the picked pin (debounced while dragging).
+function NearbyBox({ lat, lng }: { lat: number; lng: number }) {
+  const [summary, setSummary] = useState<NearbySummary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    setSummary(null);
+    const t = setTimeout(() => {
+      fetchNearbySummary(lat, lng)
+        .then(setSummary)
+        .catch(() => setSummary(null))
+        .finally(() => setLoading(false));
+    }, 700);
+    return () => clearTimeout(t);
+  }, [lat, lng]);
+
+  if (loading && !summary) {
+    return <div className="nearby-box"><p className="meta">এলাকার তথ্য আনা হচ্ছে…</p></div>;
+  }
+  if (!summary) return null;
+  const entries = Object.entries(summary.by_category);
+  return (
+    <div className="nearby-box">
+      <b>📍 এই এলাকার গত ৩০ দিন</b>
+      {summary.total === 0 ? (
+        <p className="meta">১ কি.মি. এর মধ্যে কোনো যাচাইকৃত রিপোর্ট নেই।</p>
+      ) : (
+        <p className="meta">
+          ১ কি.মি. এর মধ্যে <b>{summary.total}টি</b> যাচাইকৃত ঘটনা:{' '}
+          {entries.map(([cat, n]) => `${CATEGORY_BN[cat] ?? cat} ${n}টি`).join(' • ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function NewReportPage({ signedIn }: { signedIn: boolean }) {
   const [category, setCategory] = useState(CATEGORY_KEYS[0] ?? 'other');
   const [title, setTitle] = useState('');
@@ -336,6 +383,56 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [trackingId, setTrackingId] = useState('');
+  // Bangla voice input (Web Speech API, bn-BD). Hidden if unsupported.
+  const [listening, setListening] = useState(false);
+  const recogRef = useRef<SpeechRecognition | null>(null);
+  const voiceBaseRef = useRef('');
+  const voiceSupported = typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  const toggleVoice = () => {
+    if (listening) {
+      recogRef.current?.stop();
+      return;
+    }
+    const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!Ctor) return;
+    const rec = new Ctor();
+    recogRef.current = rec;
+    rec.lang = 'bn-BD';
+    rec.interimResults = true;
+    rec.continuous = false;
+    voiceBaseRef.current = description ? description.replace(/\s+$/, '') + ' ' : '';
+    let finalSoFar = '';
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      let interim = '';
+      for (let i = 0; i < e.results.length; i++) {
+        const text = e.results[i][0]?.transcript ?? '';
+        if (e.results[i].isFinal) finalSoFar += text;
+        else interim += text;
+      }
+      setDescription(voiceBaseRef.current + finalSoFar + interim);
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => setListening(false);
+    try {
+      rec.start();
+      setListening(true);
+      setError('');
+    } catch {
+      setListening(false);
+    }
+  };
+
+  useEffect(() => () => recogRef.current?.stop(), []);
+
+  const pickOnMap = (lat: number, lng: number) => {
+    setLocation((current) => ({
+      lat,
+      lng,
+      address: current?.address ?? `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      districtId: current?.districtId,
+    }));
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -378,12 +475,31 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
         <form className="stack-form" onSubmit={(event) => void submit(event)}>
           <label>ঘটনার ধরন<select value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORY_KEYS.map((key) => <option key={key} value={key}>{CATEGORY_BN[key]}</option>)}</select></label>
           <label>শিরোনাম<input required minLength={3} maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-          <label>ঘটনার বিবরণ<textarea required minLength={10} maxLength={5000} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+          <label>ঘটনার বিবরণ
+            <div className="desc-row">
+              <textarea required minLength={10} maxLength={5000} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="কী ঘটেছে, কখন, কীভাবে — বিস্তারিত লিখুন (সর্বনিম্ন ১০ অক্ষর)" />
+              {voiceSupported && (
+                <button
+                  type="button"
+                  className={listening ? 'mic-btn listening' : 'mic-btn'}
+                  onClick={toggleVoice}
+                  title={listening ? 'বন্ধ করুন' : 'বলে লিখুন (বাংলা)'}
+                  aria-label={listening ? 'ভয়েস ইনপুট বন্ধ করুন' : 'বাংলায় বলে বিবরণ লিখুন'}
+                >
+                  🎙️
+                </button>
+              )}
+            </div>
+            <span className="meta">{voiceSupported ? '— মাইকে চাপ দিয়ে বলেও লিখতে পারেন' : null}{listening ? ' 🎙️ শুনছি… বাংলায় বলুন' : null}</span>
+          </label>
           {['dhorshon', 'khun', 'ghum'].includes(category) && <label>অভিযুক্তের নাম (ঐচ্ছিক)<input value={accusedName} onChange={(event) => setAccusedName(event.target.value)} maxLength={200} /><span className="meta">Officially verified না হওয়া পর্যন্ত এই নাম public-এ দেখানো হবে না।</span></label>}
           <div>
-            <p className="field-label">ঘটনার অবস্থান</p>
+            <p className="field-label">ঘটনার অবস্থান *</p>
             <LocationSelectors onLocation={setLocation} />
+            <p className="meta">অথবা ম্যাপে পিন বসান:</p>
+            <MapPicker lat={location?.lat ?? null} lng={location?.lng ?? null} onPick={pickOnMap} />
             {location && <p className="location-summary">নির্বাচিত অবস্থান: {location.address} ({location.lat.toFixed(4)}, {location.lng.toFixed(4)})</p>}
+            {location && <NearbyBox lat={location.lat} lng={location.lng} />}
           </div>
           <label className="checkbox-row"><input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} /> রিপোর্টটি public-এ anonymous রাখুন</label>
           {error && <Message error>{error}</Message>}
@@ -593,6 +709,120 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
   );
 }
 
+function HistoryPanel({ reportId }: { reportId: string }) {
+  const [history, setHistory] = useState<ReportHistory | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchReportHistory(reportId)
+      .then(setHistory)
+      .catch(() => setHistory(null))
+      .finally(() => setLoading(false));
+  }, [reportId]);
+
+  if (loading) return <p className="state">ইতিহাস লোড হচ্ছে…</p>;
+  if (!history) return <p className="state err">ইতিহাস লোড হয়নি।</p>;
+  return (
+    <div className="history-panel">
+      {history.accused_name && (
+        <p className="meta"><b>অভিযুক্ত (শুধু মডারেটর):</b> {history.accused_name}</p>
+      )}
+      <b>স্ট্যাটাস ইতিহাস</b>
+      {history.status_history.length === 0 && <p className="meta">কোনো পরিবর্তন নেই।</p>}
+      <ul className="audit-list">
+        {history.status_history.map((h, i) => (
+          <li key={i}>
+            <span className="chip status">{STATUS_BN[h.toStatus] ?? h.toStatus}</span>
+            <small>{h.fromStatus ? `${STATUS_BN[h.fromStatus] ?? h.fromStatus} → ` : ''}{new Date(h.createdAt).toLocaleString('bn-BD')}</small>
+            {h.note && <p className="meta">{h.note}</p>}
+          </li>
+        ))}
+      </ul>
+      <b>মডারেশন লগ</b>
+      {history.moderation_actions.length === 0 && <p className="meta">কোনো মডারেশন অ্যাকশন নেই।</p>}
+      <ul className="audit-list">
+        {history.moderation_actions.map((a, i) => (
+          <li key={i}>
+            <span className={`chip status ${a.action === 'verify' ? 'st-verified' : 'st-rejected'}`}>
+              {a.action === 'verify' ? 'যাচাই' : 'বাতিল'}
+            </span>
+            <small>{a.moderatorName ?? 'মডারেটর'} • {new Date(a.createdAt).toLocaleString('bn-BD')}</small>
+            {a.reason && <p className="meta">{a.reason}</p>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function AdminUsersTab() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [workingId, setWorkingId] = useState('');
+
+  const load = () => {
+    setLoading(true);
+    setError('');
+    fetchAdminUsers()
+      .then((d) => setUsers(d.users))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'ব্যবহারকারী লোড হয়নি।'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const changeRole = async (id: string, role: 'citizen' | 'volunteer' | 'moderator') => {
+    setWorkingId(id);
+    setError('');
+    try {
+      await setUserRole(id, role);
+      setUsers((current) => current.map((u) => (u.id === id ? { ...u, role } : u)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'রোল বদলানো যায়নি।');
+    } finally {
+      setWorkingId('');
+    }
+  };
+
+  const roleName = (role: string) =>
+    role === 'admin' ? 'অ্যাডমিন' : role === 'moderator' ? 'মডারেটর' : role === 'volunteer' ? 'স্বেচ্ছাসেবক' : 'নাগরিক';
+
+  return (
+    <div>
+      <p className="meta">শুধু অ্যাডমিন: citizen / volunteer / moderator রোল দিন। admin রোল এখানে বদলানো যায় না, নিজের রোলও না।</p>
+      {loading && <p className="state">ব্যবহারকারী লোড হচ্ছে…</p>}
+      {error && <Message error>{error}</Message>}
+      <div className="feed">
+        {users.map((u) => (
+          <div className="card user-row" key={u.id}>
+            <div className="user-main">
+              <b>{u.name}</b>
+              <small className="meta">{u.phone} • বর্তমান: {roleName(u.role)}</small>
+            </div>
+            {u.role === 'admin' ? (
+              <span className="chip status">সুরক্ষিত</span>
+            ) : (
+              <div className="card-actions">
+                {(['citizen', 'volunteer', 'moderator'] as const).map((r) => (
+                  <button
+                    key={r}
+                    className={u.role === r ? 'small-btn on' : 'small-btn'}
+                    disabled={workingId === u.id || u.role === r}
+                    onClick={() => void changeRole(u.id, r)}
+                  >
+                    {roleName(r)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {!loading && !error && users.length === 0 && <p className="state">কোনো ব্যবহারকারী নেই।</p>}
+    </div>
+  );
+}
+
 export function ModerationPage({ profile }: { profile: AppProfile | null }) {
   const [queue, setQueue] = useState<FeedReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -603,7 +833,11 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [targetStatuses, setTargetStatuses] = useState<Record<string, string>>({});
+  const [stats, setStats] = useState<ModerationStats | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [tab, setTab] = useState<'reports' | 'users'>('reports');
   const statusOptions = Object.keys(STATUS_BN);
+  const isAdmin = profile?.role === 'admin';
 
   const load = (offset = 0, append = false) => {
     setLoading(true); setError('');
@@ -615,6 +849,7 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Report list লোড হয়নি।'))
       .finally(() => setLoading(false));
+    fetchModerationStats().then(setStats).catch(() => setStats(null));
   };
   useEffect(() => { load(0, false); }, [scope]);
 
@@ -633,6 +868,21 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
       <h1>Moderator / Admin — report control</h1>
       <p className="meta">রিপোর্ট জমা হলেই public-এ যায়। এখান থেকে আপনি যাচাই, status update বা reject করে public feed থেকে সরাতে পারবেন। আপনার note reporter-এর Track page-এ দেখা যাবে।</p>
       {!profile && <Message error>Login করে profile সম্পূর্ণ করুন।</Message>}
+      {stats && (
+        <div className="stat-grid mod-stats">
+          <div><b>{stats.pending}</b><small>অপেক্ষমাণ</small></div>
+          <div><b>{stats.verified_today}</b><small>আজ যাচাই</small></div>
+          <div><b>{stats.rejected_today}</b><small>আজ বাতিল</small></div>
+          <div><b>{stats.avg_verify_hours ?? '—'}</b><small>গড় যাচাই (ঘণ্টা)</small></div>
+        </div>
+      )}
+      <div className="filters">
+        <button className={tab === 'reports' ? 'fchip on' : 'fchip'} onClick={() => setTab('reports')}>রিপোর্ট</button>
+        {isAdmin && <button className={tab === 'users' ? 'fchip on' : 'fchip'} onClick={() => setTab('users')}>ব্যবহারকারী</button>}
+      </div>
+      {tab === 'users' && isAdmin && <AdminUsersTab />}
+      {tab === 'reports' && (
+      <>
       <div className="filters">
         <button className={scope === 'pending' ? 'fchip on' : 'fchip'} onClick={() => setScope('pending')}>যাচাই বাকি</button>
         <button className={scope === 'all' ? 'fchip on' : 'fchip'} onClick={() => setScope('all')}>সব report ({total})</button>
@@ -654,6 +904,9 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
             <textarea rows={2} maxLength={1000} value={notes[report.id] ?? ''} onChange={(event) => setNotes((current) => ({ ...current, [report.id]: event.target.value }))} placeholder="যাচাই বা status update সম্পর্কে জানাতে লিখুন" />
           </label>
           <div className="card-actions">
+            <button className="small-btn" onClick={() => setExpandedId((current) => current === report.id ? null : report.id)}>
+              {expandedId === report.id ? 'ইতিহাস লুকান' : 'ইতিহাস / লগ'}
+            </button>
             {scope === 'pending' ? (
               <>
                 <button className="small-btn" disabled={workingId === report.id} onClick={() => void change(report.id, 'verified')}>যাচাই হয়েছে mark করুন</button>
@@ -668,9 +921,11 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
               </>
             )}
           </div>
+          {expandedId === report.id && <HistoryPanel reportId={report.id} />}
         </article>
       ))}</div>
       {nextOffset !== null && <button className="small-btn" disabled={loading} onClick={() => load(nextOffset, true)}>আরও report দেখুন</button>}
+      </>)}
     </div>
   );
 }

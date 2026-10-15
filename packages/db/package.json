@@ -1,1 +1,28 @@
-{"dependencies":{"dotenv":"^16.4.5","drizzle-orm":"^0.44.2","pg":"^8.13.1"},"devDependencies":{"@types/node":"^22.10.2","@types/pg":"^8.11.0","drizzle-kit":"^0.31.1","tsx":"^4.19.2","typescript":"^5.9.2"},"exports":{".":"./src/index.ts"},"name":"db","private":true,"scripts":{"check":"tsc --noEmit","generate":"drizzle-kit generate","migrate":"drizzle-kit migrate","seed":"tsx src/seed.ts"},"type":"module","version":"0.1.0"}
+{
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.44.2",
+    "pg": "^8.13.1",
+    "@opentelemetry/api": "^1.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.0",
+    "drizzle-kit": "^0.31.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.2"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "name": "db",
+  "private": true,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "seed": "tsx src/seed.ts"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

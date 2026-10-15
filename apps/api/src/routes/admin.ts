@@ -1,11 +1,12 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { eq, desc, inArray, count } from 'drizzle-orm';
+import { eq, desc, inArray, count, and, gte } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireModerator } from '../auth.js';
 import { validateBody, uuidParam } from '../validate.js';
 import { publicReportColumns, ALL_STATUSES, verificationTierOf } from '../lib/public.js';
-import { reports, statusHistory, alerts } from 'db';
+import { reports, statusHistory, alerts, moderationActions, users } from 'db';
+import { sendToUserIds } from '../lib/notify.js';
 
 export const adminRouter = Router();
 
@@ -115,6 +116,31 @@ adminRouter.patch(
         await db.delete(alerts).where(eq(alerts.reportId, id));
       }
 
+      // Moderation audit log — verify/reject. Who did what, when, and why.
+      if (to_status === 'verified' || to_status === 'rejected') {
+        await db.insert(moderationActions).values({
+          reportId: id,
+          moderatorId: req.appProfile!.id,
+          action: to_status === 'verified' ? 'verify' : 'reject',
+          reason: note?.trim() || null,
+        });
+      }
+
+      // Notify the reporter (if not anonymous) that a moderator acted.
+      // Fire-and-forget: push failure must never break moderation.
+      if (report.reporterId && (to_status === 'verified' || to_status === 'rejected')) {
+        const title = to_status === 'verified' ? 'রিপোর্ট যাচাই হয়েছে ✓' : 'রিপোর্ট বাতিল হয়েছে';
+        const body =
+          to_status === 'verified'
+            ? `${report.trackingId}: প্রহরী যাচাইকৃত — এখন ৫ কি.মি. এলাকায় অ্যালার্ট যাবে।`
+            : `${report.trackingId}: মডারেটর রিপোর্টটি বাতিল করেছেন।${note?.trim() ? ` কারণ: ${note.trim()}` : ''}`;
+        void sendToUserIds([report.reporterId], {
+          title,
+          body,
+          data: { kind: 'moderation', report_id: id, status: to_status },
+        });
+      }
+
       res.json({
         id: updated.id,
         tracking_id: updated.trackingId,
@@ -130,3 +156,118 @@ adminRouter.patch(
     }
   },
 );
+
+// GET /api/admin/reports/:id/history — per-report status timeline +
+// moderation audit log. Moderators see the RAW accused name here (the public
+// API redacts it until the official seal).
+adminRouter.get(
+  '/:id/history',
+  requireAuth,
+  requireModerator,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = uuidParam(req, res, 'id');
+      if (!id) return;
+      const [report] = await db.select().from(reports).where(eq(reports.id, id));
+      if (!report) {
+        res.status(404).json({ error: 'report not found' });
+        return;
+      }
+      const timeline = await db
+        .select({
+          fromStatus: statusHistory.fromStatus,
+          toStatus: statusHistory.toStatus,
+          note: statusHistory.note,
+          createdAt: statusHistory.createdAt,
+        })
+        .from(statusHistory)
+        .where(eq(statusHistory.reportId, id))
+        .orderBy(statusHistory.createdAt);
+      const auditRows = await db
+        .select({
+          action: moderationActions.action,
+          reason: moderationActions.reason,
+          createdAt: moderationActions.createdAt,
+          moderatorName: users.name,
+        })
+        .from(moderationActions)
+        .leftJoin(users, eq(moderationActions.moderatorId, users.id))
+        .where(eq(moderationActions.reportId, id))
+        .orderBy(desc(moderationActions.createdAt));
+      res.json({
+        report_id: id,
+        tracking_id: report.trackingId,
+        status: report.status,
+        verification_tier: verificationTierOf(report),
+        // Raw value for moderators; the public feed redacts until official seal.
+        accused_name: report.accusedName,
+        status_history: timeline,
+        moderation_actions: auditRows,
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+// GET /api/admin/reports/stats — moderation panel header stats.
+adminRouter.get('/stats', requireAuth, requireModerator, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [pendingRow] = await db
+      .select({ n: count() })
+      .from(reports)
+      .where(inArray(reports.status, ['submitted', 'verifying']));
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [verifiedRow] = await db
+      .select({ n: count() })
+      .from(statusHistory)
+      .where(and(eq(statusHistory.toStatus, 'verified'), gte(statusHistory.createdAt, dayAgo)));
+    const [rejectedRow] = await db
+      .select({ n: count() })
+      .from(statusHistory)
+      .where(and(eq(statusHistory.toStatus, 'rejected'), gte(statusHistory.createdAt, dayAgo)));
+
+    // Avg hours from report creation to a moderator's verify/reject decision,
+    // over the last 30 days.
+    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const decisions = await db
+      .select({ reportId: moderationActions.reportId, createdAt: moderationActions.createdAt })
+      .from(moderationActions)
+      .where(
+        and(
+          inArray(moderationActions.action, ['verify', 'reject']),
+          gte(moderationActions.createdAt, monthAgo),
+        ),
+      )
+      .limit(500);
+    let avgVerifyHours: number | null = null;
+    if (decisions.length > 0) {
+      const reportIds = [...new Set(decisions.map((d) => d.reportId))];
+      const created = await db
+        .select({ id: reports.id, createdAt: reports.createdAt })
+        .from(reports)
+        .where(inArray(reports.id, reportIds));
+      const createdAt = new Map(created.map((r) => [r.id, new Date(r.createdAt).getTime()]));
+      const hours: number[] = [];
+      for (const d of decisions) {
+        const c = createdAt.get(d.reportId);
+        if (c !== undefined) {
+          const h = (new Date(d.createdAt).getTime() - c) / 3600000;
+          if (h >= 0) hours.push(h);
+        }
+      }
+      if (hours.length > 0) {
+        avgVerifyHours = Math.round((hours.reduce((a, b) => a + b, 0) / hours.length) * 10) / 10;
+      }
+    }
+
+    res.json({
+      pending: pendingRow?.n ?? 0,
+      verified_today: verifiedRow?.n ?? 0,
+      rejected_today: rejectedRow?.n ?? 0,
+      avg_verify_hours: avgVerifyHours,
+    });
+  } catch (e) {
+    next(e);
+  }
+});

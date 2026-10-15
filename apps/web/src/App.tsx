@@ -9,6 +9,12 @@ import {
   TrackPage,
   TrackSearchPage,
 } from './FeaturePages';
+import { ScorecardDetailPage, ScorecardListPage } from './ScorecardPage';
+import DabiPage from './DabiPage';
+import MissingPage from './MissingPage';
+import TrendsPage from './TrendsPage';
+import CasePage from './CasePage';
+import { LangProvider, useLang, type Lang } from './i18n';
 
 function useHashRoute(): string {
   const [hash, setHash] = useState(window.location.hash || '#/');
@@ -24,9 +30,24 @@ function LoadingPage({ text }: { text: string }) {
   return <main className="auth-shell"><p className="state">{text}</p></main>;
 }
 
-export default function App() {
+function LangToggle() {
+  const { lang, setLang, t } = useLang();
+  const next: Lang = lang === 'bn' ? 'en' : 'bn';
+  return (
+    <button
+      className="lang-toggle"
+      onClick={() => setLang(next)}
+      aria-label={lang === 'bn' ? 'Switch to English' : 'বাংলায় দেখুন'}
+    >
+      {t('lang_toggle')}
+    </button>
+  );
+}
+
+function Shell() {
   const route = useHashRoute();
   const auth = useAuthState();
+  const { t } = useLang();
 
   if (auth.loading) return <LoadingPage text="Prohori চালু হচ্ছে…" />;
   if (auth.session && auth.profileLoading) return <LoadingPage text="আপনার account যাচাই হচ্ছে…" />;
@@ -38,6 +59,7 @@ export default function App() {
   const signedIn = !!auth.session && !!profile;
   const routePathRaw = route.startsWith('#') ? route.slice(1) : route;
   const routePath = signedIn && routePathRaw === '/login' ? '/' : routePathRaw;
+  const isMod = !!profile && (profile.role === 'moderator' || profile.role === 'admin');
   let page;
   if (routePath === '/login') {
     page = <LoginPage />;
@@ -51,8 +73,20 @@ export default function App() {
     page = <TrackSearchPage />;
   } else if (routePath.startsWith('/track/')) {
     page = <TrackPage trackingId={decodeURIComponent(routePath.slice('/track/'.length))} />;
+  } else if (routePath === '/scorecard') {
+    page = <ScorecardListPage />;
+  } else if (routePath.startsWith('/scorecard/')) {
+    page = <ScorecardDetailPage thanaId={decodeURIComponent(routePath.slice('/scorecard/'.length))} />;
+  } else if (routePath === '/dabi') {
+    page = <DabiPage signedIn={signedIn} />;
+  } else if (routePath === '/missing') {
+    page = <MissingPage signedIn={signedIn} />;
+  } else if (routePath === '/trends') {
+    page = <TrendsPage />;
+  } else if (routePath.startsWith('/case/')) {
+    page = <CasePage trackingId={decodeURIComponent(routePath.slice('/case/'.length))} />;
   } else if (routePath === '/moderation') {
-    page = profile && (profile.role === 'moderator' || profile.role === 'admin')
+    page = isMod
       ? <ModerationPage profile={profile} />
       : <div className="page"><h1>অনুমতি নেই</h1><p className="meta">এই page শুধু moderator/admin account-এর জন্য।</p></div>;
   } else {
@@ -64,14 +98,19 @@ export default function App() {
       <nav className="topbar">
         <a className="topbar-brand" href="#/">প্রহরী</a>
         <div className="nav-links">
-          <a href="#/">রিপোর্ট</a>
-          <a href="#/reports/new">রিপোর্ট দিন</a>
-          <a href="#/teams">পাশে আছি</a>
-          <a href="#/fraud">Fraud নম্বর</a>
+          <a href="#/">{t('nav_report')}</a>
+          <a href="#/reports/new">{t('report_h')}</a>
+          <a href="#/teams">{t('nav_teams')}</a>
+          <a href="#/scorecard">{t('nav_scorecard')}</a>
+          <a href="#/dabi">{t('nav_dabi')}</a>
+          <a href="#/missing">{t('nav_missing')}</a>
+          <a href="#/trends">{t('nav_trends')}</a>
+          <a href="#/fraud">{t('nav_fraud')}</a>
           <a href="#/track">Track</a>
-          {profile && (profile.role === 'moderator' || profile.role === 'admin') && <a href="#/moderation">Review queue</a>}
+          {isMod && <a href="#/moderation">{t('nav_moderate')}</a>}
         </div>
         <div className="user-menu">
+          <LangToggle />
           {profile ? (
             <>
               <span className="user-name">{profile.name}</span>
@@ -83,5 +122,13 @@ export default function App() {
       {page}
       <footer className="site-footer">Prohori MVP • জরুরি বিপদে ৯৯৯-এ কল করুন।</footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <LangProvider>
+      <Shell />
+    </LangProvider>
   );
 }

@@ -87,6 +87,9 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .checkbox-row input { width: 18px !important; height: 18px; }
 .form-error, .form-notice { margin: 4px 0; padding: 10px 12px; border-radius: 10px; background: #fff1f1; font-size: 13px; line-height: 1.45; }
 .form-notice { color: #14532d; background: #eaf8ef; }
+.form-label { display: block; font-size: 13.5px; font-weight: 700; margin: 14px 0 6px; color: #33404f; }
+.form-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 560px) { .form-row2 { grid-template-columns: 1fr; } }
 .join-box { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; margin-top: 12px; }
 .fraud-result { display: flex; flex-direction: column; gap: 4px; border-radius: 12px; padding: 12px; color: #33404f; background: #edf5fc; font-size: 14px; }
 .fraud-result.is-fraud { color: #851c22; background: #fde8e9; }
@@ -124,3 +127,83 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .chip.tier-official { background: #e5f6ec; color: #187343; }
 .tier-progress { margin: 0 0 10px; color: #9a5b00; font-size: 12.5px; font-weight: 700; }
 .accused-line { margin: 0 0 10px; padding: 9px 11px; border-left: 3px solid #1e9e5a; background: #f3fbf6; color: #245c3b; font-size: 13px; }
+
+/* ---- Thana scorecard (auth rebuild) ---- */
+.score-row { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+.rank { font-size: 18px; font-weight: 700; color: #9aa7b5; min-width: 34px; }
+.score-main { flex: 1; min-width: 0; }
+.score-main b { display: block; font-size: 15.5px; }
+.score-main small { color: #6b7a8d; font-size: 12.5px; }
+.score-wrap { display: flex; align-items: center; gap: 8px; flex: none; }
+.score-bar { width: 90px; height: 10px; border-radius: 99px; background: #eef1f4; overflow: hidden; display: inline-block; }
+.score-bar i { display: block; height: 100%; border-radius: 99px; }
+.score-bar i.good, .score-num.good { background: #1e9e5a; }
+.score-bar i.mid { background: #e8930c; }
+.score-bar i.bad { background: #d92632; }
+.score-num { font-size: 16px; }
+.score-num.good { background: none; color: #1e9e5a; }
+.score-num.mid { color: #b97a0a; }
+.score-num.bad { color: #d92632; }
+.score-na { color: #9aa7b5; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.score-big { margin: 12px 0; }
+.score-big .score-bar { width: 100%; height: 14px; }
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+.stat-grid div { background: #f4f7fa; border-radius: 12px; padding: 10px 12px; }
+.stat-grid b { display: block; font-size: 19px; }
+.stat-grid small { color: #6b7a8d; font-size: 12px; }
+.mod-stats { margin: 12px 0; }
+
+/* ---- Dabi petitions ---- */
+.petition-bar { height: 10px; border-radius: 99px; background: #eef1f4; overflow: hidden; margin: 10px 0 4px; }
+.petition-bar i { display: block; height: 100%; background: #1f6feb; border-radius: 99px; }
+.sign-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.input { width: 100%; border: 1.5px solid #dbe2ea; border-radius: 12px; padding: 11px 13px; font-size: 14px; margin-bottom: 10px; font-family: inherit; }
+.input:focus { outline: none; border-color: #14324a; }
+
+/* ---- Report form: map pin picker + voice input ---- */
+.map-picker { height: 300px; border-radius: 14px; border: 1.5px solid #dbe2ea; margin-bottom: 10px; background: #eef1f4; }
+.map-picker .leaflet-container { border-radius: 13px; font-family: inherit; }
+.map-fallback { padding: 28px 16px; text-align: center; color: #6b7a8d; background: #f4f7fa; border-radius: 14px; margin-bottom: 10px; font-size: 14px; }
+.prohori-pin { background: none; border: none; }
+.prohori-pin-dot { width: 26px; height: 26px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #d92632; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+.desc-row { position: relative; }
+.desc-row textarea { padding-right: 52px; resize: vertical; }
+.mic-btn { position: absolute; right: 10px; bottom: 12px; width: 38px; height: 38px; border-radius: 50%; border: 1.5px solid #dbe2ea; background: #fff; color: #14324a; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; font-size: 18px; }
+.mic-btn.listening { background: #d92632; border-color: #d92632; color: #fff; animation: micpulse 1.2s infinite; }
+@keyframes micpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(217,38,50,.45); } 50% { box-shadow: 0 0 0 9px rgba(217,38,50,0); } }
+.listening-hint { color: #d92632; font-weight: 700; margin: -4px 0 10px; }
+.nearby-box { background: #fff8e6; border: 1.5px solid #f0d98c; border-radius: 14px; padding: 12px 14px; margin: 12px 0; font-size: 14px; }
+.nearby-box > b { display: block; margin-bottom: 4px; }
+
+/* ---- Shareable case cards ---- */
+.case-banner { border-radius: 14px; padding: 13px 16px; font-weight: 800; font-size: 15px; margin-bottom: 12px; background: #fde8e9; color: #b01e28; border: 1.5px solid #f3b7bb; }
+.case-banner.resolved { background: #e5f6ec; color: #14532d; border-color: #a9dfc0; }
+.share-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.share-box { margin-top: 10px; }
+.share-expand { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e3e8ee; }
+.share-text { white-space: pre-wrap; font-size: 14px; line-height: 1.6; background: #f4f7fa; border-radius: 12px; padding: 12px; margin: 0 0 6px; }
+.sh-fb { background: #e7f0fd; border-color: #bcd4f5; color: #1f6feb; font-weight: 700; }
+.sh-wa { background: #e5f6ec; border-color: #a9dfc0; color: #14532d; font-weight: 700; }
+.sh-tg { background: #e8f4fb; border-color: #b5dcf0; color: #0f7ab8; font-weight: 700; }
+
+/* ---- Trends ---- */
+.chart-card { padding: 12px 8px; overflow-x: auto; }
+.chart { width: 100%; min-width: 480px; height: auto; display: block; }
+
+/* ---- Missing persons ---- */
+.missing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 12px; }
+.missing-photo { width: 100%; max-height: 300px; object-fit: cover; border-radius: 12px; margin: 10px 0; }
+
+/* ---- Moderation: history, audit log, users ---- */
+.history-panel { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #e3e8ee; }
+.audit-list { list-style: none; margin: 8px 0 14px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.audit-list li { background: #f4f7fa; border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.audit-list small { color: #6b7a8d; margin-left: 8px; }
+.user-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.user-main { flex: 1; min-width: 180px; }
+.user-main small { display: block; }
+.small-btn.on { background: #14324a; color: #fff; border-color: #14324a; }
+
+/* ---- i18n toggle ---- */
+.lang-toggle { border: 1.5px solid #dbe2ea; background: #fff; color: #14324a; font-weight: 800; font-size: 13px; cursor: pointer; border-radius: 99px; padding: 6px 14px; font-family: inherit; }
+.lang-toggle:hover { border-color: #14324a; }

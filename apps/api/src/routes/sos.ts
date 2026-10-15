@@ -5,6 +5,7 @@ import { db } from '../db.js';
 import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, uuidParam } from '../validate.js';
 import { haversineKm } from '../lib/geo.js';
+import { sendToUserIds } from '../lib/notify.js';
 import { sosAlerts, users, volunteerTeams, teamMembers, thanas } from 'db';
 
 export const sosRouter = Router();
@@ -98,12 +99,14 @@ sosRouter.post(
       const memberPositions = await db
         .select({
           teamId: teamMembers.teamId,
+          userId: teamMembers.userId,
           lastLat: users.lastLat,
           lastLng: users.lastLng,
         })
         .from(teamMembers)
         .innerJoin(users, eq(teamMembers.userId, users.id))
         .where(and(isNotNull(users.lastLat), isNotNull(users.lastLng)));
+      const nearbyMemberUserIds = new Set<string>();
       for (const m of memberPositions) {
         if (
           m.lastLat !== null &&
@@ -111,6 +114,7 @@ sosRouter.post(
           haversineKm(b.lat, b.lng, m.lastLat, m.lastLng) <= 10
         ) {
           teamIds.add(m.teamId);
+          if (m.userId !== req.appProfile!.id) nearbyMemberUserIds.add(m.userId);
         }
       }
 
@@ -130,6 +134,17 @@ sosRouter.post(
 
       // TODO (Phase 2): fan out via FCM + SMS to nearbyUserIds and
       // notifiedTeams[*].members here. Currently computed, not delivered.
+
+      // FCM push fan-out (best-effort, fire-and-forget — never blocks SOS).
+      // Recipients: nearby users (5 km) + volunteer-team members (10 km).
+      const pushTargets = [...new Set([...nearbyUserIds, ...nearbyMemberUserIds])];
+      if (pushTargets.length > 0) {
+        void sendToUserIds(pushTargets, {
+          title: '🆘 SOS — কাছেই কেউ বিপদে!',
+          body: b.message?.trim() || `${b.address_text ?? 'আপনার এলাকায়'} সাহায্যের আবেদন`,
+          data: { kind: 'sos', sos_id: alert.id },
+        });
+      }
 
       res.status(201).json({
         sos_id: alert.id,

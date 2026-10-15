@@ -28,3 +28,67 @@ export const TIER_BN: Record<string, string> = {
   community: 'জনতা যাচাইকৃত',
   official: 'প্রহরী যাচাইকৃত',
 };
+
+export const CATEGORY_EN: Record<string, string> = {
+  khun: 'Murder',
+  ghum: 'Disappearance',
+  churi: 'Theft',
+  dakati: 'Robbery',
+  dhorshon: 'Rape',
+  eveteasing: 'Eve teasing',
+  madok: 'Drugs',
+  durniti: 'Corruption',
+  other: 'Other',
+};
+
+export const STATUS_EN: Record<string, string> = {
+  submitted: 'Submitted',
+  verifying: 'Verifying',
+  verified: 'Verified',
+  forwarded: 'Sent to police',
+  investigating: 'Investigating',
+  resolved: 'Resolved',
+  rejected: 'Rejected',
+};
+
+export const TIER_EN: Record<string, string> = {
+  none: 'Unverified',
+  community: 'Community verified',
+  official: 'Officially verified',
+};
+
+export const LEVEL_BN: Record<string, string> = {
+  thana: 'থানা',
+  sp: 'এসপি',
+  dig: 'ডিআইজি',
+};
+
+export const LEVEL_EN: Record<string, string> = {
+  thana: 'Thana',
+  sp: 'SP',
+  dig: 'DIG',
+};
+
+export const PETITION_STATUS_BN: Record<string, string> = {
+  active: 'চলমান',
+  escalated: 'এসকেলেটেড',
+  closed: 'বন্ধ',
+};
+
+export const PETITION_STATUS_EN: Record<string, string> = {
+  active: 'Active',
+  escalated: 'Escalated',
+  closed: 'Closed',
+};
+
+export const GENDER_BN: Record<string, string> = {
+  male: 'পুরুষ',
+  female: 'নারী',
+  other: 'অন্যান্য',
+};
+
+export const GENDER_EN: Record<string, string> = {
+  male: 'Male',
+  female: 'Female',
+  other: 'Other',
+};

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { eq, and, inArray, desc } from 'drizzle-orm';
+import { eq, and, inArray, desc, gte } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, isPgUniqueViolation, pathParam, uuidParam } from '../validate.js';
@@ -154,6 +154,50 @@ reportsRouter.get('/', async (req: Request, res: Response, next: NextFunction) =
     }
     const sliced = rows.slice(0, limit);
     res.json({ reports: sliced.map(toPublicReport), count: sliced.length });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /api/reports/nearby-summary?lat=&lng= — 30-day verified crime history
+// within 1 km of a point, counted by category. Used by the report form's map
+// pin picker ("এই এলাকায় গত ৩০ দিনে ৪টি চুরি").
+// NOTE: registered BEFORE /:trackingId — Express matches in order and
+// "nearby-summary" would otherwise be captured as a tracking id.
+reportsRouter.get('/nearby-summary', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    if (
+      req.query.lat === undefined ||
+      req.query.lng === undefined ||
+      Number.isNaN(lat) ||
+      Number.isNaN(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    ) {
+      res.status(400).json({ error: 'lat and lng query params are required and must be valid coordinates' });
+      return;
+    }
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const rows = await db
+      .select({ category: reports.category, lat: reports.lat, lng: reports.lng })
+      .from(reports)
+      .where(and(eq(reports.status, 'verified'), gte(reports.occurredAt, since)))
+      .limit(500);
+    const nearby = rows.filter((r) => haversineKm(lat, lng, r.lat, r.lng) <= 1);
+    const byCategory: Record<string, number> = {};
+    for (const r of nearby) byCategory[r.category] = (byCategory[r.category] ?? 0) + 1;
+    res.json({
+      lat,
+      lng,
+      radius_km: 1,
+      days: 30,
+      total: nearby.length,
+      by_category: byCategory,
+    });
   } catch (e) {
     next(e);
   }

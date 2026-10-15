@@ -260,3 +260,221 @@ export function moderateReport(reportId: string, toStatus: string, note?: string
     { to_status: toStatus, note },
   );
 }
+
+// ---- Thana scorecard (public) ----
+
+export interface Scorecard {
+  thana_id: string;
+  thana_name: string;
+  district_name: string;
+  total_reports: number;
+  verified_reports: number;
+  action_taken_sum: number;
+  no_action_sum: number;
+  resolved_count: number;
+  resolution_rate_pct: number | null;
+  avg_verify_to_resolve_hours: number | null;
+  score: number | null;
+}
+
+export interface ScorecardDetail extends Scorecard {
+  recent_reports: Array<{ tracking_id: string; title: string; status: string; created_at: string }>;
+}
+
+export function fetchScorecards(): Promise<{ scorecards: Scorecard[]; count: number }> {
+  return get('/api/thanas/scorecard');
+}
+
+export function fetchThanaScorecard(id: string): Promise<ScorecardDetail> {
+  return get(`/api/thanas/${encodeURIComponent(id)}/scorecard`);
+}
+
+// ---- FCM device registration (signed-in user only) ----
+
+export function registerDeviceToken(token: string, platform: 'android' | 'ios' | 'web'): Promise<{ ok: boolean }> {
+  return post('/api/devices/register', { token, platform });
+}
+
+// ---- Dabi petitions ----
+
+export interface Petition {
+  id: string;
+  title: string;
+  description: string;
+  threshold: number;
+  level: string;
+  status: string;
+  created_at: string;
+  signature_count: number;
+  progress_pct: number;
+  report: { tracking_id: string; title: string } | null;
+}
+
+export function fetchPetitions(): Promise<{ petitions: Petition[]; count: number }> {
+  return get('/api/petitions');
+}
+
+export function createPetition(input: {
+  title: string;
+  description: string;
+  threshold?: number;
+  report_id?: string;
+}): Promise<Petition> {
+  return post('/api/petitions', input);
+}
+
+// Signed-in user signs; no user id in the body — the server reads the token.
+export function signPetition(id: string): Promise<{ petition_id: string; signature_count: number }> {
+  return post(`/api/petitions/${encodeURIComponent(id)}/sign`, {});
+}
+
+export interface PetitionShare {
+  petition_id: string;
+  threshold_reached: boolean;
+  signature_count: number;
+  threshold: number;
+  share_text: string;
+  share_url: string;
+}
+
+export function fetchPetitionShare(id: string): Promise<PetitionShare> {
+  return get(`/api/petitions/${encodeURIComponent(id)}/share`);
+}
+
+// ---- Nearby summary (public, verified-only 30d/1km) ----
+
+export interface NearbySummary {
+  lat: number;
+  lng: number;
+  radius_km: number;
+  days: number;
+  total: number;
+  by_category: Record<string, number>;
+}
+
+export function fetchNearbySummary(lat: number, lng: number): Promise<NearbySummary> {
+  return get(`/api/reports/nearby-summary?lat=${lat}&lng=${lng}`);
+}
+
+// ---- Missing persons ----
+
+export interface MissingPerson {
+  id: string;
+  name: string;
+  age: number | null;
+  gender: string | null;
+  photo_url: string | null;
+  last_seen_lat: number | null;
+  last_seen_lng: number | null;
+  last_seen_text: string | null;
+  last_seen_date: string | null;
+  contact_phone: string;
+  status: string;
+  found_at: string | null;
+  created_at: string;
+}
+
+export function fetchMissingPersons(status = 'missing'): Promise<{
+  persons: MissingPerson[];
+  count: number;
+  counts: { missing: number; found: number };
+}> {
+  return get(`/api/missing?status=${encodeURIComponent(status)}`);
+}
+
+export function createMissingPerson(input: {
+  name: string;
+  age?: number | null;
+  gender?: string | null;
+  photo_url?: string | null;
+  last_seen_lat?: number | null;
+  last_seen_lng?: number | null;
+  last_seen_text?: string | null;
+  last_seen_date?: string | null;
+  contact_phone: string;
+}): Promise<MissingPerson> {
+  return post('/api/missing', input);
+}
+
+export function markMissingFound(id: string): Promise<MissingPerson> {
+  return post(`/api/missing/${encodeURIComponent(id)}/found`, {});
+}
+
+// ---- Trends (public) ----
+
+export interface TrendsWeek {
+  week_start: string;
+  total: number;
+  counts: Record<string, number>;
+}
+
+export interface TrendsDistrict {
+  district_id: string | null;
+  district_name: string | null;
+  count: number;
+}
+
+export interface Trends {
+  weeks: number;
+  by_week: TrendsWeek[];
+  by_district: TrendsDistrict[];
+  verification_rate_pct: number | null;
+  resolution_rate_pct: number | null;
+  pipeline_total: number;
+}
+
+export function fetchTrends(): Promise<Trends> {
+  return get('/api/stats/trends');
+}
+
+// ---- Shareable case page ----
+
+export function caseShareUrl(trackingId: string): string {
+  return `${API_BASE}/share/case/${encodeURIComponent(trackingId)}`;
+}
+
+// ---- Moderation (signed-in moderators; server checks role) ----
+
+export interface ModerationStats {
+  pending: number;
+  verified_today: number;
+  rejected_today: number;
+  avg_verify_hours: number | null;
+}
+
+export interface ReportHistory {
+  report_id: string;
+  tracking_id: string;
+  status: string;
+  verification_tier: 'none' | 'community' | 'official';
+  accused_name: string | null;
+  status_history: Array<{ fromStatus: string | null; toStatus: string; note: string | null; createdAt: string }>;
+  moderation_actions: Array<{ action: string; reason: string | null; createdAt: string; moderatorName: string | null }>;
+}
+
+export function fetchModerationStats(): Promise<ModerationStats> {
+  return get('/api/admin/reports/stats');
+}
+
+export function fetchReportHistory(id: string): Promise<ReportHistory> {
+  return get(`/api/admin/reports/${encodeURIComponent(id)}/history`);
+}
+
+// ---- Admin: user role management ----
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  phone: string;
+  role: string;
+  trustScore: number;
+  createdAt: string;
+}
+
+export function fetchAdminUsers(): Promise<{ users: AdminUser[]; count: number }> {
+  return get('/api/admin/users?limit=200');
+}
+
+export function setUserRole(id: string, role: 'citizen' | 'volunteer' | 'moderator'): Promise<AdminUser> {
+  return patch(`/api/admin/users/${encodeURIComponent(id)}/role`, { role });
+}

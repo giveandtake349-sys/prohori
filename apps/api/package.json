@@ -1,1 +1,29 @@
-{"dependencies":{"cors":"^2.8.5","db":"workspace:*","dotenv":"^16.4.5","drizzle-orm":"^0.44.2","express":"^5.1.0","pg":"^8.13.1","zod":"^3.25.76"},"devDependencies":{"@types/cors":"^2.8.17","@types/express":"^5.0.0","@types/node":"^22.10.2","@types/pg":"^8.11.0","tsx":"^4.19.2","typescript":"^5.9.2"},"name":"api","private":true,"scripts":{"check":"tsc --noEmit","dev":"tsx src/index.ts","start":"tsx src/index.ts"},"type":"module","version":"0.1.0"}
+{
+  "dependencies": {
+    "cors": "^2.8.5",
+    "db": "workspace:*",
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.44.2",
+    "express": "^5.1.0",
+    "pg": "^8.13.1",
+    "zod": "^3.25.76",
+    "firebase-admin": "^12.7.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.2"
+  },
+  "name": "api",
+  "private": true,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}
