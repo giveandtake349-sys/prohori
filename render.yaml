@@ -1,0 +1,16 @@
+# Render Blueprint — one-click deploy for the Prohori API.
+# Render dashboard → New → Blueprint → select the `prohori` repo.
+# Then set the DATABASE_URL env var (Supabase Postgres connection string).
+services:
+  - type: web
+    name: prohori-api
+    runtime: node
+    plan: free
+    buildCommand: pnpm install && pnpm --filter api run check
+    startCommand: pnpm --filter api start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false

@@ -1,0 +1,54 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, 'Hind Siliguri', sans-serif; background: #eef1f4; color: #1a2430; }
+.page { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
+.hero { background: #14324a; color: #fff; border-radius: 18px; padding: 26px 20px; margin-bottom: 14px; }
+.hero h1 { margin: 0 0 4px; font-size: 30px; }
+.hero p { margin: 0; color: #b9c8d8; }
+.filters { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; }
+.fchip { flex: none; border: 1px solid #dbe2ea; background: #fff; border-radius: 99px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+.fchip.on { background: #14324a; color: #fff; border-color: #14324a; }
+.feed { display: flex; flex-direction: column; gap: 12px; }
+.card { background: #fff; border: 1px solid #e3e8ee; border-radius: 16px; padding: 16px; }
+.card h3 { margin: 10px 0 4px; font-size: 17px; }
+.meta { color: #6b7a8d; font-size: 13px; margin: 0 0 8px; }
+.desc { font-size: 14px; line-height: 1.6; margin: 0 0 10px; color: #33404f; }
+.card-top { display: flex; gap: 8px; }
+.chip { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px; }
+.chip.cat { background: #eef3f8; color: #14324a; }
+.chip.status { background: #e7f0fd; color: #1f6feb; }
+.chip.st-resolved { background: #e5f6ec; color: #1e9e5a; }
+.chip.st-verified { background: #e5f6ec; color: #1e9e5a; }
+.chip.st-rejected { background: #fde8e9; color: #d92632; }
+.card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.corro { color: #6b7a8d; font-size: 13px; font-weight: 600; }
+.track-link { color: #1f6feb; font-weight: 700; font-size: 13px; text-decoration: none; }
+.action-line { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e3e8ee; font-size: 12.5px; font-weight: 700; }
+.a-taken { color: #1e9e5a; }
+.a-no { color: #d92632; }
+.state { text-align: center; color: #6b7a8d; padding: 32px 0; }
+.state.err { color: #d92632; }
+.back { display: inline-block; margin-bottom: 12px; color: #1f6feb; text-decoration: none; font-weight: 700; }
+.sec { font-size: 17px; margin: 20px 0 10px; }
+.timeline { list-style: none; margin: 0; padding: 0 0 0 22px; position: relative; }
+.timeline::before { content: ''; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: #dbe2ea; }
+.timeline li { position: relative; padding: 0 0 18px; }
+.timeline li::before { content: ''; position: absolute; left: -19px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: #c9d3dd; }
+.timeline li.done::before { background: #1e9e5a; }
+.timeline li.now::before { background: #1f6feb; box-shadow: 0 0 0 4px #d3e3fb; }
+.timeline b { display: block; font-size: 14.5px; }
+.timeline span { display: block; color: #6b7a8d; font-size: 13px; }
+.timeline small { color: #9aa7b5; font-size: 12px; }
+.hero-link { display: inline-block; margin-top: 12px; color: #ffd166; font-weight: 700; text-decoration: none; font-size: 14px; }
+.input { width: 100%; border: 1.5px solid #dbe2ea; border-radius: 12px; padding: 11px 13px; font-size: 14px; margin-bottom: 10px; font-family: inherit; }
+.input:focus { outline: none; border-color: #14324a; }
+.sos-card { border: 2px solid #d92632; margin-bottom: 6px; }
+.sos-btn { width: 100%; background: #d92632; color: #fff; border: none; border-radius: 14px; padding: 15px; font-size: 17px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.sos-btn:disabled { opacity: .6; cursor: default; }
+.sos-result { margin-top: 12px; padding: 12px; background: #e5f6ec; border-radius: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: #14532d; }
+.sos-result b { font-size: 14.5px; }
+.contacts { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.contact-row { display: flex; justify-content: space-between; align-items: center; background: #f4f7fa; border: 1px solid #e3e8ee; border-radius: 12px; padding: 12px 14px; text-decoration: none; color: #1a2430; }
+.contact-row b { font-size: 14px; }
+.contact-row span { color: #1f6feb; font-weight: 700; font-size: 13px; }
+.contact-row.call999 { background: #fde8e9; border-color: #f5c2c7; }
+.contact-row.call999 b { color: #b01e28; }

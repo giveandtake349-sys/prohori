@@ -1,0 +1,1 @@
+{"name":"prohori","packageManager":"pnpm@10.34.7","private":true,"scripts":{"check":"pnpm -r run check","dev:api":"pnpm --filter api run dev","dev:web":"pnpm --filter web run dev"},"type":"module","version":"0.1.0"}

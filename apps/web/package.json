@@ -1,0 +1,1 @@
+{"dependencies":{"react":"^19.1.0","react-dom":"^19.1.0"},"devDependencies":{"@types/react":"^19.1.8","@types/react-dom":"^19.1.6","@vitejs/plugin-react":"^4.3.4","typescript":"^5.9.2","vite":"^6.3.5"},"name":"web","private":true,"scripts":{"build":"vite build","check":"tsc --noEmit","dev":"vite"},"type":"module","version":"0.1.0"}

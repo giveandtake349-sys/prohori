@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# esbuild's postinstall must run or vite (web) breaks
+onlyBuiltDependencies:
+  - esbuild
