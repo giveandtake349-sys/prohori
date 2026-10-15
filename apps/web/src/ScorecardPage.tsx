@@ -49,7 +49,7 @@ export function ScorecardListPage() {
       <div className="feed">
         {cards.map((c, i) => (
           <a className="card score-row" key={c.thana_id} href={`#/scorecard/${c.thana_id}`}>
-            <span className="rank">#{i + 1}</span>
+            <span className={`rank${i === 0 ? ' top' : ''}`}>#{i + 1}</span>
             <span className="score-main">
               <b>{c.thana_name}</b>
               <small>

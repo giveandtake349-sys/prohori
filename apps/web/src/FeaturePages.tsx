@@ -53,7 +53,15 @@ function Message({ error, children }: { error?: boolean; children: string }) {
 }
 
 function TierBadge({ tier }: { tier: FeedReport['verificationTier'] }) {
-  return <span className={`chip tier tier-${tier}`}>{TIER_BN[tier] ?? TIER_BN.none}</span>;
+  const icon =
+    tier === 'official' ? (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M9 12l2 2 4-4" /></svg>
+    ) : tier === 'community' ? (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
+    ) : (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" /></svg>
+    );
+  return <span className={`chip tier tier-${tier}`}>{icon}{TIER_BN[tier] ?? TIER_BN.none}</span>;
 }
 
 function TierProgress({ report }: { report: FeedReport }) {
@@ -92,41 +100,62 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
     }
   };
 
+  const canAct = signedIn && report.status !== 'resolved' && report.status !== 'rejected';
+  const remaining = Math.max(0, 10 - report.corroborationCount);
+  const proofIcon =
+    report.verificationTier === 'official' ? (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+    ) : (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
+    );
+
   return (
-    <article className="card">
-      <div className="card-top">
-        <span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span>
-        <TierBadge tier={report.verificationTier} />
-        <span className={`chip status st-${report.status}`}>{STATUS_BN[report.status] ?? report.status}</span>
+    <article className={`rcard tier-${report.verificationTier}`}>
+      <div className="rbody">
+        <div className="rtop">
+          <span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span>
+          <TierBadge tier={report.verificationTier} />
+        </div>
+        <h3>{report.title}</h3>
+        <p className="rmeta">{report.addressText} • {timeAgo(report.createdAt)}</p>
+        <ActionLine report={report} />
       </div>
-      <h3>{report.title}</h3>
-      <p className="meta">{report.addressText} • {timeAgo(report.createdAt)}</p>
-      <p className="desc">{report.description}</p>
-      {report.accusedName && <p className="accused-line">অভিযুক্তের নাম: <b>{report.accusedName}</b></p>}
-      <TierProgress report={report} />
-      {report.status === 'submitted' && <p className="meta">এই রিপোর্টটি সরাসরি public-এ প্রকাশিত হয়েছে; এখনো যাচাই করা হয়নি।</p>}
-      <div className="card-foot">
-        <span className="corro">{report.corroborationCount} জন নিশ্চিত করেছে</span>
-        <a className="track-link" href={`#/track/${encodeURIComponent(report.trackingId)}`}>
-          ট্র্যাক করো ({report.trackingId}) →
-        </a>
+      <div className="proof">
+        <span className={`pic${report.verificationTier === 'official' ? ' ok' : ''}`}>{proofIcon}</span>
+        <small>
+          {report.verificationTier === 'official' ? (
+            <><span className="hl-g">প্রহরী যাচাইকৃত ✓</span> • <b>{report.corroborationCount} জন</b> নিশ্চিত করেছিল</>
+          ) : report.verificationTier === 'community' ? (
+            <><b>{report.corroborationCount} জন</b> নিশ্চিত করেছে • <span className="hl-y">জনতা যাচাইকৃত</span></>
+          ) : (
+            <><b>{report.corroborationCount} জন</b> নিশ্চিত করেছে — আরও <span className="hl-y">{remaining} জন</span> হলে <span className="hl-y">জনতা যাচাইকৃত</span> হবে</>
+          )}
+        </small>
       </div>
-      <ActionLine report={report} />
-      {signedIn && report.status !== 'resolved' && report.status !== 'rejected' && (
-        <div className="card-actions">
-          <button className="small-btn" disabled={busy} onClick={() => void act(() => corroborateReport(report.id), 'আপনার corroboration নথিভুক্ত হয়েছে।')}>
-            আমিও দেখেছি
+      <div className="rfoot">
+        <a className="btn blue" href={`#/track/${encodeURIComponent(report.trackingId)}`}>বিস্তারিত</a>
+        {canAct && (
+          <button className={`btn ${report.verificationTier === 'none' ? 'yellow' : 'dark'}`} disabled={busy} onClick={() => void act(() => corroborateReport(report.id), 'আপনার corroboration নথিভুক্ত হয়েছে।')}>
+            ✓ নিশ্চিত করো
           </button>
-          <button className="small-btn" disabled={busy} onClick={() => void act(() => submitActionClaim(report.id, 'action_taken'), 'ব্যবস্থা নেওয়ার মতামত নথিভুক্ত হয়েছে।')}>
+        )}
+      </div>
+      {canAct && (
+        <div className="rfoot sub">
+          <button className="btn dark" disabled={busy} onClick={() => void act(() => submitActionClaim(report.id, 'action_taken'), 'ব্যবস্থা নেওয়ার মতামত নথিভুক্ত হয়েছে।')}>
             ব্যবস্থা নেওয়া হয়েছে
           </button>
-          <button className="small-btn secondary" disabled={busy} onClick={() => void act(() => submitActionClaim(report.id, 'no_action'), 'ব্যবস্থা না নেওয়ার মতামত নথিভুক্ত হয়েছে।')}>
+          <button className="btn dark" disabled={busy} onClick={() => void act(() => submitActionClaim(report.id, 'no_action'), 'ব্যবস্থা না নেওয়ার মতামত নথিভুক্ত হয়েছে।')}>
             নেওয়া হয়নি
           </button>
         </div>
       )}
-      {error && <Message error>{error}</Message>}
-      {notice && <Message>{notice}</Message>}
+      {(error || notice) && (
+        <div style={{ padding: '0 14px 10px' }}>
+          {error && <Message error>{error}</Message>}
+          {notice && <Message>{notice}</Message>}
+        </div>
+      )}
     </article>
   );
 }
@@ -155,6 +184,10 @@ export function HomePage({ signedIn }: { signedIn: boolean }) {
         <p>জনতার চোখ — অপরাধ দেখলে চুপ নয়</p>
         <p className="hero-intro">নিরাপদে রিপোর্ট করুন, তথ্য যাচাই করুন, আর আপনার এলাকার মানুষের পাশে দাঁড়ান।</p>
       </header>
+      <div className="sos-strip">
+        <div><b>জরুরি বিপদে?</b><small>এক চাপে সবাইকে জানাও</small></div>
+        <a className="btn-sos" href="#/teams">SOS</a>
+      </div>
       <div className="quick-actions">
         <a className="quick-action" href="#/reports/new">＋ রিপোর্ট জমা দিন</a>
         <a className="quick-action" href="#/teams">পাশে আছি টিম</a>
@@ -205,19 +238,35 @@ export function TrackPage({ trackingId }: { trackingId: string }) {
   return (
     <div className="page">
       <a className="back" href="#/">← সব রিপোর্ট</a>
+      <div className="dhero">
+        <TierBadge tier={report.verificationTier} />
+        <h2>{report.title}</h2>
+        <p className="rmeta">{report.trackingId} • {report.addressText}</p>
+      </div>
       <article className="card">
         <div className="card-top">
           <span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span>
-          <TierBadge tier={report.verificationTier} />
           <span className={`chip status st-${report.status}`}>{STATUS_BN[report.status] ?? report.status}</span>
         </div>
-        <h3>{report.title}</h3>
-        <p className="meta">{report.addressText} • {report.trackingId}</p>
         <p className="desc">{report.description}</p>
         {report.accusedName && <p className="accused-line">অভিযুক্তের নাম: <b>{report.accusedName}</b></p>}
         <TierProgress report={report} />
         <p className="corro">{report.corroborationCount} জন নিশ্চিত করেছে • {media.length}টি প্রমাণ সংযুক্ত</p>
         <ActionLine report={report} />
+        {media.length > 0 && (
+          <>
+            <p className="field-label" style={{ marginTop: 12 }}>প্রমাণ ({media.length})</p>
+            <div className="evrow">
+              {media.map((m, i) => (
+                <a key={i} className="ev" href={m.url} target="_blank" rel="noreferrer" title={`SHA-256: ${m.sha256}`}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                  <img src={m.url} alt="প্রমাণ" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  <span className="hash">{m.sha256.slice(0, 4)}…✓</span>
+                </a>
+              ))}
+            </div>
+          </>
+        )}
       </article>
       <div className="section-heading">
         <h2 className="sec">আপডেট ও নোটিফিকেশন</h2>
@@ -358,17 +407,12 @@ function NearbyBox({ lat, lng }: { lat: number; lng: number }) {
   }
   if (!summary) return null;
   const entries = Object.entries(summary.by_category);
+  if (summary.total === 0) {
+    return <div className="nearby-box"><p className="meta">১ কি.মি. এর মধ্যে গত ৩০ দিনে কোনো যাচাইকৃত রিপোর্ট নেই।</p></div>;
+  }
   return (
-    <div className="nearby-box">
-      <b>📍 এই এলাকার গত ৩০ দিন</b>
-      {summary.total === 0 ? (
-        <p className="meta">১ কি.মি. এর মধ্যে কোনো যাচাইকৃত রিপোর্ট নেই।</p>
-      ) : (
-        <p className="meta">
-          ১ কি.মি. এর মধ্যে <b>{summary.total}টি</b> যাচাইকৃত ঘটনা:{' '}
-          {entries.map(([cat, n]) => `${CATEGORY_BN[cat] ?? cat} ${n}টি`).join(' • ')}
-        </p>
-      )}
+    <div className="warnbox">
+      ⚠️ এই এলাকায় গত ৩০ দিনে: {entries.map(([cat, n]) => `${CATEGORY_BN[cat] ?? cat} ${n}`).join(' • ')}
     </div>
   );
 }
@@ -473,7 +517,16 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
         <p className="meta">জমা দিলেই রিপোর্টটি public-এ প্রকাশ হবে। Anonymous বেছে নিলে আপনার পরিচয় গোপন থাকবে; কিন্তু report-এর শিরোনাম, বিবরণ ও অবস্থান public-এ দেখা যাবে।</p>
         {!signedIn && <Message error>রিপোর্ট জমা দিতে আগে login করুন।</Message>}
         <form className="stack-form" onSubmit={(event) => void submit(event)}>
-          <label>ঘটনার ধরন<select value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORY_KEYS.map((key) => <option key={key} value={key}>{CATEGORY_BN[key]}</option>)}</select></label>
+          <div>
+            <p className="field-label">ঘটনার ধরন</p>
+            <div className="catchips" role="radiogroup" aria-label="ঘটনার ধরন">
+              {CATEGORY_KEYS.map((key) => (
+                <button key={key} type="button" role="radio" aria-checked={category === key} className={category === key ? 'catchip sel' : 'catchip'} onClick={() => setCategory(key)}>
+                  {CATEGORY_BN[key]}
+                </button>
+              ))}
+            </div>
+          </div>
           <label>শিরোনাম<input required minLength={3} maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>ঘটনার বিবরণ
             <div className="desc-row">
@@ -501,7 +554,12 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
             {location && <p className="location-summary">নির্বাচিত অবস্থান: {location.address} ({location.lat.toFixed(4)}, {location.lng.toFixed(4)})</p>}
             {location && <NearbyBox lat={location.lat} lng={location.lng} />}
           </div>
-          <label className="checkbox-row"><input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} /> রিপোর্টটি public-এ anonymous রাখুন</label>
+          <div className="anonrow" role="switch" aria-checked={anonymous} tabIndex={0}
+            onClick={() => setAnonymous((v) => !v)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setAnonymous((v) => !v); } }}>
+            <div><b>পরিচয় গোপন রাখো</b><small>কেউ জানবে না কে রিপোর্ট করেছে</small></div>
+            <span className={`switch${anonymous ? ' on' : ''}`} />
+          </div>
           {error && <Message error>{error}</Message>}
           {trackingId && <div className="success-box"><b>রিপোর্ট public-এ প্রকাশ হয়েছে</b><span>এটি এখনো যাচাই করা হয়নি। আপনার tracking ID: <strong>{trackingId}</strong></span><a href={`#/track/${encodeURIComponent(trackingId)}`}>সব update ও status দেখুন →</a></div>}
           <button className="primary-btn" type="submit" disabled={busy || !signedIn}>{busy ? 'জমা হচ্ছে…' : 'রিপোর্ট জমা দিন'}</button>
@@ -891,33 +949,37 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
       {error && <Message error>{error}</Message>}
       {!loading && !error && queue.length === 0 && <p className="state">{scope === 'pending' ? 'যাচাইয়ের অপেক্ষায় কোনো report নেই।' : 'এখনো কোনো report জমা হয়নি।'}</p>}
       <div className="feed">{queue.map((report) => (
-        <article className="card" key={report.id}>
-          <div className="card-top">
+        <article className="mcard" key={report.id}>
+          <div className="rtop">
             <span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span>
-            <span className={`chip status st-${report.status}`}>{STATUS_BN[report.status] ?? report.status}</span>
-            <span className="chip status">{report.corroborationCount} corroboration</span>
+            <TierBadge tier={report.verificationTier} />
           </div>
           <h3>{report.title}</h3>
-          <p className="meta">{report.addressText} • tracking: {report.trackingId}</p>
+          <div className="mrow">
+            <span>✓ <b>{report.corroborationCount}</b> নিশ্চিত</span>
+            <span className={`chip status st-${report.status}`}>{STATUS_BN[report.status] ?? report.status}</span>
+            <span>tracking: <b>{report.trackingId}</b></span>
+          </div>
+          <p className="meta">{report.addressText}</p>
           <p className="desc">{report.description}</p>
-          <label>Reporter-এর Track page-এ দেখানোর moderator note
+          <label className="form-label">Reporter-এর Track page-এ দেখানোর moderator note
             <textarea rows={2} maxLength={1000} value={notes[report.id] ?? ''} onChange={(event) => setNotes((current) => ({ ...current, [report.id]: event.target.value }))} placeholder="যাচাই বা status update সম্পর্কে জানাতে লিখুন" />
           </label>
-          <div className="card-actions">
-            <button className="small-btn" onClick={() => setExpandedId((current) => current === report.id ? null : report.id)}>
+          <div className="mbtns">
+            <button className="mbtn info" onClick={() => setExpandedId((current) => current === report.id ? null : report.id)}>
               {expandedId === report.id ? 'ইতিহাস লুকান' : 'ইতিহাস / লগ'}
             </button>
             {scope === 'pending' ? (
               <>
-                <button className="small-btn" disabled={workingId === report.id} onClick={() => void change(report.id, 'verified')}>যাচাই হয়েছে mark করুন</button>
-                <button className="small-btn danger" disabled={workingId === report.id} onClick={() => void change(report.id, 'rejected')}>Reject করে public থেকে সরান</button>
+                <button className="mbtn ok" disabled={workingId === report.id} onClick={() => void change(report.id, 'verified')}>✓ প্রহরী সিল</button>
+                <button className="mbtn no" disabled={workingId === report.id} onClick={() => void change(report.id, 'rejected')}>✕ বাতিল</button>
               </>
             ) : (
               <>
                 <select aria-label={`${report.trackingId} report status`} value={targetStatuses[report.id] ?? report.status} disabled={workingId === report.id} onChange={(event) => setTargetStatuses((current) => ({ ...current, [report.id]: event.target.value }))}>
                   {statusOptions.map((status) => <option key={status} value={status}>{STATUS_BN[status] ?? status}</option>)}
                 </select>
-                <button className="small-btn" disabled={workingId === report.id || ((targetStatuses[report.id] ?? report.status) === report.status && !notes[report.id]?.trim())} onClick={() => void change(report.id, targetStatuses[report.id] ?? report.status)}>Status / note update করুন</button>
+                <button className="mbtn ok" disabled={workingId === report.id || ((targetStatuses[report.id] ?? report.status) === report.status && !notes[report.id]?.trim())} onClick={() => void change(report.id, targetStatuses[report.id] ?? report.status)}>Status / note update করুন</button>
               </>
             )}
           </div>
