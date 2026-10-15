@@ -23,6 +23,8 @@ export interface FeedReport {
   actionTakenCount: number;
   noActionCount: number;
   createdAt: string;
+  verificationTier: 'none' | 'community' | 'official';
+  accusedName: string | null;
 }
 
 export interface MediaItem {
@@ -172,6 +174,7 @@ export interface NewReport {
   occurred_at?: string;
   is_anonymous: boolean;
   district_id?: string | null;
+  accused_name?: string | null;
 }
 
 export function createReport(report: NewReport) {
@@ -179,7 +182,7 @@ export function createReport(report: NewReport) {
 }
 
 export function corroborateReport(reportId: string) {
-  return post<{ corroboration_count: number; status: string }>(`/api/reports/${encodeURIComponent(reportId)}/corroborate`, {});
+  return post<{ corroboration_count: number; status: string; community_verified: boolean; verification_tier?: string }>(`/api/reports/${encodeURIComponent(reportId)}/corroborate`, {});
 }
 
 export function submitActionClaim(reportId: string, claim: 'action_taken' | 'no_action', note?: string) {

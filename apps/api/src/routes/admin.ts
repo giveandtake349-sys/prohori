@@ -4,7 +4,7 @@ import { eq, desc, inArray, count } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireModerator } from '../auth.js';
 import { validateBody, uuidParam } from '../validate.js';
-import { publicReportColumns, ALL_STATUSES } from '../lib/public.js';
+import { publicReportColumns, ALL_STATUSES, verificationTierOf } from '../lib/public.js';
 import { reports, statusHistory, alerts } from 'db';
 
 export const adminRouter = Router();
@@ -43,7 +43,12 @@ adminRouter.get('/queue', requireAuth, requireModerator, async (req: Request, re
           .limit(limit)
           .offset(offset);
     const nextOffset = offset + rows.length < total ? offset + rows.length : null;
-    res.json({ queue: rows, count: total, scope, nextOffset });
+    res.json({
+      queue: rows.map((row) => ({ ...row, verificationTier: verificationTierOf(row) })),
+      count: total,
+      scope,
+      nextOffset,
+    });
   } catch (e) {
     next(e);
   }
@@ -117,6 +122,8 @@ adminRouter.patch(
         corroboration_count: updated.corroborationCount,
         action_taken_count: updated.actionTakenCount,
         no_action_count: updated.noActionCount,
+        verification_tier: verificationTierOf(updated),
+        accused_name: updated.accusedName,
       });
     } catch (e) {
       next(e);

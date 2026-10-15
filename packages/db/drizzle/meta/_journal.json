@@ -15,6 +15,41 @@
       "when": 1792065110338,
       "tag": "0001_daily_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792077781604,
+      "tag": "0002_productive_roxanne_simpson",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792078396061,
+      "tag": "0003_colossal_caretaker",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792078531069,
+      "tag": "0004_futuristic_maddog",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792078865413,
+      "tag": "0005_minor_victor_mancha",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792079445514,
+      "tag": "0006_daily_pretty_boy",
+      "breakpoints": true
     }
   ]
 }

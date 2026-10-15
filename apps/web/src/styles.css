@@ -118,3 +118,9 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .location-box .small-btn, .location-box .form-error { grid-column: auto; }
   .join-box { grid-template-columns: 1fr; }
 }
+
+.chip.tier-none { background: #eef1f4; color: #667382; }
+.chip.tier-community { background: #fff1d6; color: #9a5b00; }
+.chip.tier-official { background: #e5f6ec; color: #187343; }
+.tier-progress { margin: 0 0 10px; color: #9a5b00; font-size: 12.5px; font-weight: 700; }
+.accused-line { margin: 0 0 10px; padding: 9px 11px; border-left: 3px solid #1e9e5a; background: #f3fbf6; color: #245c3b; font-size: 13px; }

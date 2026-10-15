@@ -8,6 +8,7 @@ import {
   timestamp,
   numeric,
   uniqueIndex,
+  index,
 } from 'drizzle-orm/pg-core';
 
 // ---------------------------------------------------------------------------
@@ -61,27 +62,45 @@ export const districts = pgTable('districts', {
  * status: submitted | verifying | verified | forwarded | investigating | resolved | rejected
  * reporterId is NULL for anonymous reports — the public API never exposes it.
  */
-export const reports = pgTable('reports', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  trackingId: text('tracking_id').notNull().unique(),
-  reporterId: uuid('reporter_id').references(() => users.id),
-  category: text('category').notNull(),
-  title: text('title').notNull(),
-  description: text('description').notNull(),
-  lat: doublePrecision('lat').notNull(),
-  lng: doublePrecision('lng').notNull(),
-  addressText: text('address_text').notNull(),
-  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
-  isAnonymous: boolean('is_anonymous').notNull().default(false),
-  status: text('status').notNull().default('submitted'),
-  // Denormalized for cheap filtering (set from the incident location at submit).
-  districtId: uuid('district_id').references(() => districts.id),
-  corroborationCount: integer('corroboration_count').notNull().default(0),
-  // Public accountability: does the community say authorities acted?
-  actionTakenCount: integer('action_taken_count').notNull().default(0),
-  noActionCount: integer('no_action_count').notNull().default(0),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const reports = pgTable(
+  'reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    trackingId: text('tracking_id').notNull().unique(),
+    reporterId: uuid('reporter_id').references(() => users.id),
+    category: text('category').notNull(),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    addressText: text('address_text').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    isAnonymous: boolean('is_anonymous').notNull().default(false),
+    status: text('status').notNull().default('submitted'),
+    // Denormalized for cheap filtering (set from the incident location at submit).
+    districtId: uuid('district_id').references(() => districts.id),
+    // Nearest thana at submit time (within 25 km) — powers the thana scorecard.
+    // Reports created before this column existed keep thana_id NULL; the
+    // scorecard attributes those on read via nearest-thana matching.
+    thanaId: uuid('thana_id').references(() => thanas.id),
+    corroborationCount: integer('corroboration_count').notNull().default(0),
+    // 2-tier verification (commit 7):
+    //  - Tier 1 "জনতা যাচাইকৃত": 10 distinct corroborations auto-sets
+    //    communityVerified (no status change — moderator seal is separate).
+    //  - Tier 2 "প্রহরী যাচাইকৃত": moderator/admin sets status 'verified'.
+    communityVerified: boolean('community_verified').notNull().default(false),
+    communityVerifiedAt: timestamp('community_verified_at', { withTimezone: true }),
+    // Accused/suspect name for sensitive cases (e.g. ধর্ষণ). Public API
+    // redacts this until the OFFICIAL (tier 2) seal is applied.
+    accusedName: text('accused_name'),
+    // Public accountability: does the community say authorities acted?
+    actionTakenCount: integer('action_taken_count').notNull().default(0),
+    noActionCount: integer('no_action_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // Geo index for the nearby crime-history lookup (GET /api/reports/nearby-summary).
+  (t) => [index('reports_lat_lng_idx').on(t.lat, t.lng)],
+);
 
 /**
  * Evidence attached to a report. sha256 is recorded at upload time so the
@@ -208,6 +227,105 @@ export const actionClaims = pgTable(
   (t) => [uniqueIndex('action_claims_report_user_uniq').on(t.reportId, t.userId)],
 );
 
+/**
+ * Push-notification device tokens (FCM). One row per device; token is the
+ * unique key so re-registering the same device just re-links the user.
+ */
+export const deviceTokens = pgTable(
+  'device_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    token: text('token').notNull().unique(),
+    platform: text('platform').notNull().default('android'), // android | ios | web
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+/**
+ * "Dabi" petitions — community pressure when a case sees no action.
+ * level: thana | sp | dig (escalation ladder). status: active | escalated | closed.
+ * A petition may link a report, or stand alone (e.g. a demand about an area).
+ */
+export const petitions = pgTable('petitions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reportId: uuid('report_id').references(() => reports.id, { onDelete: 'set null' }),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  createdBy: uuid('created_by').references(() => users.id),
+  threshold: integer('threshold').notNull().default(100),
+  level: text('level').notNull().default('thana'),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One signature per user per petition (signing twice is a no-op). */
+export const petitionSignatures = pgTable(
+  'petition_signatures',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    petitionId: uuid('petition_id')
+      .notNull()
+      .references(() => petitions.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('petition_signatures_petition_user_uniq').on(t.petitionId, t.userId)],
+);
+
+/**
+ * Moderation audit log — who did what to which report, and when.
+ * action: verify | reject | request_evidence | escalate
+ */
+export const moderationActions = pgTable('moderation_actions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reportId: uuid('report_id')
+    .notNull()
+    .references(() => reports.id, { onDelete: 'cascade' }),
+  moderatorId: uuid('moderator_id')
+    .notNull()
+    .references(() => users.id),
+  action: text('action').notNull(),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Missing persons board — community board for missing people.
+ * contact_phone is intentionally PUBLIC: that's how a finder reaches the family.
+ * status: missing | found.
+ */
+export const missingPersons = pgTable('missing_persons', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  age: integer('age'),
+  gender: text('gender'), // male | female | other
+  photoUrl: text('photo_url'),
+  lastSeenLat: doublePrecision('last_seen_lat'),
+  lastSeenLng: doublePrecision('last_seen_lng'),
+  lastSeenText: text('last_seen_text'),
+  lastSeenDate: timestamp('last_seen_date', { withTimezone: true }),
+  contactPhone: text('contact_phone').notNull(),
+  status: text('status').notNull().default('missing'),
+  reporterId: uuid('reporter_id').references(() => users.id),
+  foundAt: timestamp('found_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Audit log for petitions (created, escalated, closed). */
+export const petitionEvents = pgTable('petition_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  petitionId: uuid('petition_id')
+    .notNull()
+    .references(() => petitions.id, { onDelete: 'cascade' }),
+  event: text('event').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** A broadcast alert created for a verified report (default 5 km radius). */
 export const alerts = pgTable('alerts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -247,3 +365,7 @@ export type District = typeof districts.$inferSelect;
 export type VolunteerTeam = typeof volunteerTeams.$inferSelect;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type SosAlert = typeof sosAlerts.$inferSelect;
+export type DeviceToken = typeof deviceTokens.$inferSelect;
+export type Petition = typeof petitions.$inferSelect;
+export type PetitionSignature = typeof petitionSignatures.$inferSelect;
+export type PetitionEvent = typeof petitionEvents.$inferSelect;

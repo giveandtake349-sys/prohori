@@ -27,7 +27,7 @@ import {
   type Team,
   type Thana,
 } from './api';
-import { CATEGORY_BN, CATEGORY_KEYS, STATUS_BN } from './labels';
+import { CATEGORY_BN, CATEGORY_KEYS, STATUS_BN, TIER_BN } from './labels';
 
 function timeAgo(iso: string): string {
   const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -40,6 +40,16 @@ function timeAgo(iso: string): string {
 
 function Message({ error, children }: { error?: boolean; children: string }) {
   return <p className={error ? 'form-error' : 'form-notice'} role={error ? 'alert' : 'status'}>{children}</p>;
+}
+
+function TierBadge({ tier }: { tier: FeedReport['verificationTier'] }) {
+  return <span className={`chip tier tier-${tier}`}>{TIER_BN[tier] ?? TIER_BN.none}</span>;
+}
+
+function TierProgress({ report }: { report: FeedReport }) {
+  if (report.verificationTier !== 'none') return null;
+  const remaining = Math.max(0, 10 - report.corroborationCount);
+  return remaining > 0 ? <p className="tier-progress">আরও {remaining} জন নিশ্চিত করলে জনতা যাচাইকৃত হবে</p> : null;
 }
 
 function ActionLine({ report }: { report: FeedReport }) {
@@ -76,11 +86,14 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
     <article className="card">
       <div className="card-top">
         <span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span>
+        <TierBadge tier={report.verificationTier} />
         <span className={`chip status st-${report.status}`}>{STATUS_BN[report.status] ?? report.status}</span>
       </div>
       <h3>{report.title}</h3>
       <p className="meta">{report.addressText} • {timeAgo(report.createdAt)}</p>
       <p className="desc">{report.description}</p>
+      {report.accusedName && <p className="accused-line">অভিযুক্তের নাম: <b>{report.accusedName}</b></p>}
+      <TierProgress report={report} />
       {report.status === 'submitted' && <p className="meta">এই রিপোর্টটি সরাসরি public-এ প্রকাশিত হয়েছে; এখনো যাচাই করা হয়নি।</p>}
       <div className="card-foot">
         <span className="corro">{report.corroborationCount} জন নিশ্চিত করেছে</span>
@@ -185,11 +198,14 @@ export function TrackPage({ trackingId }: { trackingId: string }) {
       <article className="card">
         <div className="card-top">
           <span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span>
+          <TierBadge tier={report.verificationTier} />
           <span className={`chip status st-${report.status}`}>{STATUS_BN[report.status] ?? report.status}</span>
         </div>
         <h3>{report.title}</h3>
         <p className="meta">{report.addressText} • {report.trackingId}</p>
         <p className="desc">{report.description}</p>
+        {report.accusedName && <p className="accused-line">অভিযুক্তের নাম: <b>{report.accusedName}</b></p>}
+        <TierProgress report={report} />
         <p className="corro">{report.corroborationCount} জন নিশ্চিত করেছে • {media.length}টি প্রমাণ সংযুক্ত</p>
         <ActionLine report={report} />
       </article>
@@ -314,6 +330,7 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
   const [category, setCategory] = useState(CATEGORY_KEYS[0] ?? 'other');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [accusedName, setAccusedName] = useState('');
   const [anonymous, setAnonymous] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number; address: string; districtId?: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -337,10 +354,12 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
         address_text: location.address,
         is_anonymous: anonymous,
         district_id: location.districtId,
+        accused_name: ['dhorshon', 'khun', 'ghum'].includes(category) && accusedName.trim() ? accusedName.trim() : null,
       });
       setTrackingId(result.tracking_id);
       setTitle('');
       setDescription('');
+      setAccusedName('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'রিপোর্ট জমা হয়নি।');
     } finally {
@@ -360,6 +379,7 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
           <label>ঘটনার ধরন<select value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORY_KEYS.map((key) => <option key={key} value={key}>{CATEGORY_BN[key]}</option>)}</select></label>
           <label>শিরোনাম<input required minLength={3} maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>ঘটনার বিবরণ<textarea required minLength={10} maxLength={5000} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+          {['dhorshon', 'khun', 'ghum'].includes(category) && <label>অভিযুক্তের নাম (ঐচ্ছিক)<input value={accusedName} onChange={(event) => setAccusedName(event.target.value)} maxLength={200} /><span className="meta">Officially verified না হওয়া পর্যন্ত এই নাম public-এ দেখানো হবে না।</span></label>}
           <div>
             <p className="field-label">ঘটনার অবস্থান</p>
             <LocationSelectors onLocation={setLocation} />

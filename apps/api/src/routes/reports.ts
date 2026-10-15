@@ -6,7 +6,7 @@ import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, isPgUniqueViolation, pathParam, uuidParam } from '../validate.js';
 import { generateTrackingId } from '../lib/tracking.js';
 import { haversineKm } from '../lib/geo.js';
-import { publicReportColumns, PUBLIC_STATUSES, CATEGORIES } from '../lib/public.js';
+import { publicReportColumns, PUBLIC_STATUSES, CATEGORIES, toPublicReport, COMMUNITY_VERIFY_THRESHOLD } from '../lib/public.js';
 import { reports, reportMedia, corroborations, actionClaims, statusHistory, districts } from 'db';
 
 export const reportsRouter = Router();
@@ -28,6 +28,8 @@ const createReportSchema = z.object({
   is_anonymous: z.boolean().default(false),
   // Denormalized incident district for cheap filtering (optional).
   district_id: z.string().uuid().nullable().optional(),
+  // Sensitive-case name; public responses redact it until official verification.
+  accused_name: z.string().min(2).max(200).nullable().optional(),
   media: z.array(mediaSchema).max(10).optional(),
 });
 
@@ -41,6 +43,11 @@ reportsRouter.post(
     try {
       const b = req.body as z.infer<typeof createReportSchema>;
       const anonymous = b.is_anonymous === true;
+      const sensitiveCategory = ['dhorshon', 'khun', 'ghum'].includes(b.category);
+      if (b.accused_name && !sensitiveCategory) {
+        res.status(400).json({ error: 'accused_name is only supported for sensitive case categories' });
+        return;
+      }
       if (b.district_id) {
         const [d] = await db.select({ id: districts.id }).from(districts).where(eq(districts.id, b.district_id));
         if (!d) {
@@ -67,6 +74,7 @@ reportsRouter.post(
               occurredAt: b.occurred_at ? new Date(b.occurred_at) : new Date(),
               isAnonymous: anonymous,
               districtId: b.district_id ?? null,
+              accusedName: b.accused_name ?? null,
             })
             .returning();
           break;
@@ -144,7 +152,8 @@ reportsRouter.get('/', async (req: Request, res: Response, next: NextFunction) =
     if (lat !== undefined && lng !== undefined) {
       rows = rows.filter((r) => haversineKm(lat, lng, r.lat, r.lng) <= radiusKm);
     }
-    res.json({ reports: rows.slice(0, limit), count: Math.min(rows.length, limit) });
+    const sliced = rows.slice(0, limit);
+    res.json({ reports: sliced.map(toPublicReport), count: sliced.length });
   } catch (e) {
     next(e);
   }
@@ -184,7 +193,7 @@ reportsRouter.get('/:trackingId', async (req: Request, res: Response, next: Next
       .from(statusHistory)
       .where(eq(statusHistory.reportId, row.id))
       .orderBy(statusHistory.createdAt);
-    res.json({ report: row, media, history });
+    res.json({ report: toPublicReport(row), media, history });
   } catch (e) {
     next(e);
   }
@@ -224,10 +233,15 @@ reportsRouter.post(
 
       const newCount = report.corroborationCount + 1;
       let newStatus = report.status;
+      const newlyCommunityVerified = !report.communityVerified && newCount >= COMMUNITY_VERIFY_THRESHOLD;
       if (report.status === 'submitted' && newCount >= 3) {
         newStatus = 'verifying'; // review queue — a moderator still verifies by hand
       }
-      await db.update(reports).set({ corroborationCount: newCount, status: newStatus }).where(eq(reports.id, id));
+      await db.update(reports).set({
+        corroborationCount: newCount,
+        status: newStatus,
+        ...(newlyCommunityVerified ? { communityVerified: true, communityVerifiedAt: new Date() } : {}),
+      }).where(eq(reports.id, id));
       if (newStatus !== report.status) {
         await db.insert(statusHistory).values({
           reportId: id,
@@ -237,7 +251,21 @@ reportsRouter.post(
           note: `Moved to review queue (${newCount} corroborations)`,
         });
       }
-      res.json({ corroboration_count: newCount, status: newStatus });
+      if (newlyCommunityVerified) {
+        await db.insert(statusHistory).values({
+          reportId: id,
+          fromStatus: newStatus,
+          toStatus: newStatus,
+          actorId: null,
+          note: `জনতা যাচাইকৃত — ${newCount} জন নিশ্চিত করেছে (community verified)`,
+        });
+      }
+      res.json({
+        corroboration_count: newCount,
+        status: newStatus,
+        community_verified: report.communityVerified || newlyCommunityVerified,
+        verification_tier: newlyCommunityVerified ? 'community' : undefined,
+      });
     } catch (e) {
       next(e);
     }

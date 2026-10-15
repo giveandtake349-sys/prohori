@@ -22,3 +22,9 @@ export const STATUS_BN: Record<string, string> = {
 };
 
 export const CATEGORY_KEYS = Object.keys(CATEGORY_BN);
+
+export const TIER_BN: Record<string, string> = {
+  none: 'যাচাই হয়নি',
+  community: 'জনতা যাচাইকৃত',
+  official: 'প্রহরী যাচাইকৃত',
+};

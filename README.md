@@ -26,8 +26,10 @@ prohori/
 1. Authenticated user category, title, details ও Bangladesh location দিয়ে report জমা দেন; anonymous mode reporter identity লুকায়, content/location নয়।
 2. Submit হলেই report `submitted` status-এ public হয় এবং card-এ `প্রকাশিত · যাচাই বাকি` দেখায়। `submitted` বা `verifying` কখনো moderator-verified দাবি নয়।
 3. Community corroboration-এর threshold পেরোলে status `verifying` হতে পারে, কিন্তু report public-ই থাকে।
-4. Moderator/admin pending queue বা সব report-এর তালিকা থেকে status (`verified`, `forwarded`, `investigating`, `resolved`, `rejected` ইত্যাদি) বদলাতে ও note দিতে পারেন। `rejected` report public feed-এ থাকে না।
-5. Reporter tracking ID দিয়ে Track page-এ বর্তমান status, status transition ও moderator note দেখতে পারেন; history প্রতি ৩০ সেকেন্ডে refresh হয়। এটি in-app update feed—email, push বা SMS notification নয়।
+4. **2-tier verification:** ১০ জন আলাদা authenticated user corroborate করলে report-এর `জনতা যাচাইকৃত` community badge হয়—এটি status বদলায় না এবং official verification নয়। Moderator/admin status `verified` করলে `প্রহরী যাচাইকৃত` official tier হয়; পরবর্তী official pipeline status-ও সেই tier বজায় রাখে।
+5. Moderator/admin pending queue বা সব report-এর তালিকা থেকে status (`verified`, `forwarded`, `investigating`, `resolved`, `rejected` ইত্যাদি) বদলাতে ও note দিতে পারেন। `rejected` report public feed-এ থাকে না।
+6. ধর্ষণ, খুন বা গুম report-এ optional accused name দেওয়া যায়। Official tier না হওয়া পর্যন্ত public API ও public UI-তে নামটি `null`/লুকানো থাকে; moderator queue-তে authorized moderator raw value দেখতে পারেন।
+7. Reporter tracking ID দিয়ে Track page-এ বর্তমান status, status transition ও moderator note দেখতে পারেন; history প্রতি ৩০ সেকেন্ডে refresh হয়। এটি in-app update feed—email, push বা SMS notification নয়।
 
 ## Authentication ও permissions
 
@@ -46,10 +48,11 @@ cp .env.example .env
 # .env-এ local বা Prohori-only values বসান; কোনো secret commit করবেন না
 ```
 
-Database migration ও seed-এর জন্য সঠিক Prohori `DATABASE_URL` ব্যবহার করুন:
+Database migration ও seed-এর জন্য সঠিক Prohori `DATABASE_URL` ব্যবহার করুন। Production Prohori database-এ migration `0002`–`0006` ইতোমধ্যে manually applied; সেগুলো পুনরায় চালাবেন না:
 
 ```bash
 pnpm --filter db run generate
+# নতুন migration তৈরি হলে আগে review করুন; production-এ apply করার আগে অনুমতি নিন
 pnpm --filter db run migrate
 pnpm --filter db run seed
 ```
@@ -62,13 +65,6 @@ pnpm --filter api run check
 pnpm --filter web run check
 pnpm --filter db run generate
 pnpm --filter web run build
-```
-
-Local run:
-
-```bash
-pnpm --filter api run dev    # http://localhost:4000
-pnpm --filter web run dev    # http://localhost:5173
 ```
 
 Typecheck-এর জন্য package script ব্যবহার করুন; bare `tsc --noEmit` ব্যবহার করবেন না। `db generate` schema comparison করে, নিজে SQL apply করে না।
@@ -100,12 +96,12 @@ API prefix `/api`; protected route-এ Supabase Bearer token লাগে।
 | `GET` | `/api/auth/me` | Verified session ও Prohori profile |
 | `POST` | `/api/auth/profile` | Authenticated profile create/update |
 | `POST` | `/api/reports` | Authenticated report submit; সঙ্গে সঙ্গে public |
-| `GET` | `/api/reports?category=&district_id=&lat=&lng=&radius_km=&limit=` | Public report feed |
-| `GET` | `/api/reports/:trackingId` | Public tracking ID দিয়ে report ও history |
-| `POST` | `/api/reports/:id/corroborate` | Authenticated community corroboration |
+| `GET` | `/api/reports?category=&district_id=&lat=&lng=&radius_km=&limit=` | Public report feed; verification tier-সহ |
+| `GET` | `/api/reports/:trackingId` | Public tracking ID দিয়ে report ও history; sensitive name redacted |
+| `POST` | `/api/reports/:id/corroborate` | Authenticated community corroboration; ১০ distinct হলে community seal |
 | `POST` | `/api/reports/:id/action-claim` | `action_taken` / `no_action` claim |
-| `GET` | `/api/admin/reports/queue?scope=pending\|all&limit=100&offset=0` | Moderator/admin queue বা সব report |
-| `PATCH` | `/api/admin/reports/:id/status` | Status change বা note-only update |
+| `GET` | `/api/admin/reports/queue?scope=pending\|all&limit=100&offset=0` | Moderator/admin queue বা সব report; tier ও raw sensitive field |
+| `PATCH` | `/api/admin/reports/:id/status` | Authenticated moderator/admin status change বা note-only update |
 | `GET` | `/api/geo/divisions` | ৮ division |
 | `GET` | `/api/geo/districts?division_id=` | District list/filter |
 | `GET` | `/api/geo/thanas?district_id=` | Thana list/filter |
@@ -122,12 +118,12 @@ API prefix `/api`; protected route-এ Supabase Bearer token লাগে।
 
 Implementation locations:
 
-- Public status set: `apps/api/src/lib/public.ts`
-- Reports/feed/tracking/history: `apps/api/src/routes/reports.ts`
+- Public status/tier/redaction: `apps/api/src/lib/public.ts`
+- Reports/feed/tracking/history/corroboration: `apps/api/src/routes/reports.ts`
 - Moderator queue/status/history: `apps/api/src/routes/admin.ts`
 - Auth verification: `apps/api/src/auth.ts`
 - Web pages: `apps/web/src/FeaturePages.tsx`
-- Status labels: `apps/web/src/labels.ts`
+- Status/tier labels: `apps/web/src/labels.ts`
 - Drizzle schema: `packages/db/src/schema.ts`
 
 ## MVP limitations
