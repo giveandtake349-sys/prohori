@@ -12,7 +12,7 @@ export const CATEGORY_BN: Record<string, string> = {
 };
 
 export const STATUS_BN: Record<string, string> = {
-  submitted: 'জমা হয়েছে',
+  submitted: 'প্রকাশিত · যাচাই বাকি',
   verifying: 'যাচাই চলছে',
   verified: 'যাচাইকৃত',
   forwarded: 'থানায় পাঠানো',

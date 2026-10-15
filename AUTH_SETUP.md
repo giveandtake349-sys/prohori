@@ -6,6 +6,8 @@
 - Google sign-in flow এবং প্রথম login-এ নাম/মোবাইল নিয়ে Prohori profile তৈরি।
 - API প্রতিটি protected request-এর bearer token Supabase Auth-এর কাছে যাচাই করে। body-তে পাঠানো `user_id`, `reporter_id` বা `actor_id`-কে আর পরিচয়ের প্রমাণ হিসেবে ধরা হয় না।
 - Report জমা, corroboration, action claim, fraud report, team তৈরি/যোগদান, SOS ও moderator review authenticated। Team সদস্য না হলে emergency contact নম্বর দেখা যাবে না।
+- Report জমা হলেই public feed-এ প্রকাশ হয়; “প্রকাশিত · যাচাই বাকি” মানে এখনও moderator যাচাই করেননি। Moderator/admin পরে সব report তালিকা থেকে status বদলাতে, note দিতে বা reject করে public feed থেকে সরাতে পারেন।
+- Track page-এ reporter প্রতিটি status change ও moderator note দেখতে পান; page ৩০ সেকেন্ড অন্তর refresh হয়। Email/push notification provider এখনো যুক্ত নেই।
 - Auth-এর জন্য নতুন database migration লাগে না; আগের `public.users.id`-এর সঙ্গে Supabase Auth user UUID যুক্ত হয়।
 
 ## Supabase project URL allow-list

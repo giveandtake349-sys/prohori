@@ -24,8 +24,8 @@ export const publicReportColumns = {
   createdAt: reports.createdAt,
 } as const;
 
-/** Statuses visible on the public feed (nothing pending verification). */
-export const PUBLIC_STATUSES = ['verified', 'forwarded', 'investigating', 'resolved'] as const;
+/** Reports are public immediately; the status clearly distinguishes unverified submissions. */
+export const PUBLIC_STATUSES = ['submitted', 'verifying', 'verified', 'forwarded', 'investigating', 'resolved'] as const;
 
 export const ALL_STATUSES = [
   'submitted',

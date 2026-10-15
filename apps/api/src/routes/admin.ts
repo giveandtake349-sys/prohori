@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, inArray, count } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireModerator } from '../auth.js';
 import { validateBody, uuidParam } from '../validate.js';
@@ -14,19 +14,36 @@ const statusChangeSchema = z.object({
   note: z.string().max(1000).optional(),
 });
 
-// GET /api/admin/reports/queue — moderator review queue.
-// Only 'verifying' reports (community corroboration got them here);
-// ordered by corroboration count so the hottest reports are reviewed first.
-// Includes police-action accountability counters.
-adminRouter.get('/queue', requireAuth, requireModerator, async (_req: Request, res: Response, next: NextFunction) => {
+// GET /api/admin/reports/queue?scope=pending|all — moderators control all reports.
+// Pending includes every new submission, not just community-corroborated reports.
+adminRouter.get('/queue', requireAuth, requireModerator, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const rows = await db
-      .select(publicReportColumns)
-      .from(reports)
-      .where(eq(reports.status, 'verifying'))
-      .orderBy(desc(reports.corroborationCount))
-      .limit(100);
-    res.json({ queue: rows, count: rows.length });
+    const scope = req.query.scope === 'all' ? 'all' : 'pending';
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 200) : 100;
+    const rawOffset = Number(req.query.offset);
+    const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
+    const condition = scope === 'pending' ? inArray(reports.status, ['submitted', 'verifying']) : undefined;
+    const countRows = condition
+      ? await db.select({ total: count() }).from(reports).where(condition)
+      : await db.select({ total: count() }).from(reports);
+    const total = countRows[0]?.total ?? 0;
+    const rows = condition
+      ? await db
+          .select(publicReportColumns)
+          .from(reports)
+          .where(condition)
+          .orderBy(desc(reports.corroborationCount), desc(reports.createdAt))
+          .limit(limit)
+          .offset(offset)
+      : await db
+          .select(publicReportColumns)
+          .from(reports)
+          .orderBy(desc(reports.createdAt))
+          .limit(limit)
+          .offset(offset);
+    const nextOffset = offset + rows.length < total ? offset + rows.length : null;
+    res.json({ queue: rows, count: total, scope, nextOffset });
   } catch (e) {
     next(e);
   }
@@ -51,8 +68,8 @@ adminRouter.patch(
         res.status(404).json({ error: 'report not found' });
         return;
       }
-      if (report.status === to_status) {
-        res.status(400).json({ error: `report is already ${to_status}` });
+      if (report.status === to_status && !note?.trim()) {
+        res.status(400).json({ error: `report is already ${to_status}; add a note or choose another status` });
         return;
       }
 
@@ -77,9 +94,20 @@ adminRouter.patch(
         note: note ?? null,
       });
 
-      // A verified report goes public: create its 5 km community alert.
+      // The report is already public; verification creates one 5 km community alert.
       if (to_status === 'verified') {
-        await db.insert(alerts).values({ reportId: id, radiusKm: '5' });
+        const [existingAlert] = await db
+          .select({ id: alerts.id })
+          .from(alerts)
+          .where(eq(alerts.reportId, id))
+          .limit(1);
+        if (!existingAlert) {
+          await db.insert(alerts).values({ reportId: id, radiusKm: '5' });
+        }
+      }
+      // Rejected reports are removed from the public feed and no longer alertable.
+      if (to_status === 'rejected') {
+        await db.delete(alerts).where(eq(alerts.reportId, id));
       }
 
       res.json({

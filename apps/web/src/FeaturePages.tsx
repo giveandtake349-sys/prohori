@@ -81,6 +81,7 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
       <h3>{report.title}</h3>
       <p className="meta">{report.addressText} • {timeAgo(report.createdAt)}</p>
       <p className="desc">{report.description}</p>
+      {report.status === 'submitted' && <p className="meta">এই রিপোর্টটি সরাসরি public-এ প্রকাশিত হয়েছে; এখনো যাচাই করা হয়নি।</p>}
       <div className="card-foot">
         <span className="corro">{report.corroborationCount} জন নিশ্চিত করেছে</span>
         <a className="track-link" href={`#/track/${encodeURIComponent(report.trackingId)}`}>
@@ -136,7 +137,8 @@ export function HomePage({ signedIn }: { signedIn: boolean }) {
         <a className="quick-action" href="#/teams">পাশে আছি টিম</a>
         <a className="quick-action" href="#/fraud">প্রতারণার নম্বর যাচাই</a>
       </div>
-      <h2 className="sec">জনসমক্ষে যাচাইকৃত রিপোর্ট</h2>
+      <h2 className="sec">জনসমক্ষে প্রকাশিত রিপোর্ট</h2>
+      <p className="meta">রিপোর্ট জমা দিলেই public-এ দেখা যায়। “প্রকাশিত · যাচাই বাকি” মানে moderator এখনো তথ্য যাচাই করেননি—status দেখে সিদ্ধান্ত নিন।</p>
       <div className="filters">
         <button className={category === '' ? 'fchip on' : 'fchip'} onClick={() => setCategory('')}>সব</button>
         {CATEGORY_KEYS.map((key) => (
@@ -160,9 +162,18 @@ export function TrackPage({ trackingId }: { trackingId: string }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchReportByTrackingId(trackingId)
-      .then(setDetail)
-      .catch(() => setError('এই tracking ID-তে কোনো রিপোর্ট পাওয়া যায়নি।'));
+    let active = true;
+    const load = async () => {
+      try {
+        const next = await fetchReportByTrackingId(trackingId);
+        if (active) { setDetail(next); setError(''); }
+      } catch {
+        if (active) setError((current) => current || 'এই tracking ID-তে কোনো রিপোর্ট পাওয়া যায়নি।');
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 30_000);
+    return () => { active = false; window.clearInterval(timer); };
   }, [trackingId]);
 
   if (error) return <div className="page"><p className="state err">{error}</p><a href="#/">← ফিরে যান</a></div>;
@@ -182,10 +193,18 @@ export function TrackPage({ trackingId }: { trackingId: string }) {
         <p className="corro">{report.corroborationCount} জন নিশ্চিত করেছে • {media.length}টি প্রমাণ সংযুক্ত</p>
         <ActionLine report={report} />
       </article>
-      <h2 className="sec">রিপোর্টের অগ্রগতি</h2>
+      <div className="section-heading">
+        <h2 className="sec">আপডেট ও নোটিফিকেশন</h2>
+        <button className="small-btn" type="button" onClick={() => {
+          void fetchReportByTrackingId(trackingId).then((next) => { setDetail(next); setError(''); }).catch(() => undefined);
+        }}>এখন refresh করুন</button>
+      </div>
+      <p className="meta">প্রতিটি status পরিবর্তন ও moderator-এর note এখানে দেখা যাবে; page প্রতি ৩০ সেকেন্ডে নিজে refresh হয়। এখনো email বা push notification পাঠানো হয় না।</p>
       <ol className="timeline">
         {history.map((entry, index) => (
           <li key={`${entry.createdAt}-${index}`} className={index === history.length - 1 ? 'now' : 'done'}>
+            {entry.fromStatus && entry.fromStatus !== entry.toStatus && <span>{STATUS_BN[entry.fromStatus] ?? entry.fromStatus} → </span>}
+            {entry.fromStatus && entry.fromStatus === entry.toStatus && <span>অতিরিক্ত update · </span>}
             <b>{STATUS_BN[entry.toStatus] ?? entry.toStatus}</b>
             {entry.note && <span>{entry.note}</span>}
             <small>{new Date(entry.createdAt).toLocaleString('bn-BD')}</small>
@@ -335,6 +354,7 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
       <section className="card">
         <h1>নিরাপদে অপরাধের রিপোর্ট দিন</h1>
         <p className="meta">তাৎক্ষণিক বিপদের ক্ষেত্রে জরুরি সেবা ৯৯৯-এ কল করুন। এই app জরুরি সেবার বিকল্প নয়।</p>
+        <p className="meta">জমা দিলেই রিপোর্টটি public-এ প্রকাশ হবে। Anonymous বেছে নিলে আপনার পরিচয় গোপন থাকবে; কিন্তু report-এর শিরোনাম, বিবরণ ও অবস্থান public-এ দেখা যাবে।</p>
         {!signedIn && <Message error>রিপোর্ট জমা দিতে আগে login করুন।</Message>}
         <form className="stack-form" onSubmit={(event) => void submit(event)}>
           <label>ঘটনার ধরন<select value={category} onChange={(event) => setCategory(event.target.value)}>{CATEGORY_KEYS.map((key) => <option key={key} value={key}>{CATEGORY_BN[key]}</option>)}</select></label>
@@ -347,7 +367,7 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
           </div>
           <label className="checkbox-row"><input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} /> রিপোর্টটি public-এ anonymous রাখুন</label>
           {error && <Message error>{error}</Message>}
-          {trackingId && <div className="success-box"><b>রিপোর্ট জমা হয়েছে</b><span>আপনার tracking ID: <strong>{trackingId}</strong></span><a href={`#/track/${encodeURIComponent(trackingId)}`}>অগ্রগতি দেখুন →</a></div>}
+          {trackingId && <div className="success-box"><b>রিপোর্ট public-এ প্রকাশ হয়েছে</b><span>এটি এখনো যাচাই করা হয়নি। আপনার tracking ID: <strong>{trackingId}</strong></span><a href={`#/track/${encodeURIComponent(trackingId)}`}>সব update ও status দেখুন →</a></div>}
           <button className="primary-btn" type="submit" disabled={busy || !signedIn}>{busy ? 'জমা হচ্ছে…' : 'রিপোর্ট জমা দিন'}</button>
         </form>
       </section>
@@ -558,35 +578,79 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [workingId, setWorkingId] = useState('');
-  const load = () => {
+  const [scope, setScope] = useState<'pending' | 'all'>('pending');
+  const [total, setTotal] = useState(0);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [targetStatuses, setTargetStatuses] = useState<Record<string, string>>({});
+  const statusOptions = Object.keys(STATUS_BN);
+
+  const load = (offset = 0, append = false) => {
     setLoading(true); setError('');
-    fetchModerationQueue().then((data) => setQueue(data.queue)).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Review queue লোড হয়নি।')).finally(() => setLoading(false));
+    fetchModerationQueue(scope, offset)
+      .then((data) => {
+        setQueue((current) => append ? [...current, ...data.queue] : data.queue);
+        setTotal(data.count);
+        setNextOffset(data.nextOffset);
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Report list লোড হয়নি।'))
+      .finally(() => setLoading(false));
   };
-  useEffect(load, []);
-  const change = async (reportId: string, status: 'verified' | 'rejected') => {
+  useEffect(() => { load(0, false); }, [scope]);
+
+  const change = async (reportId: string, status: string) => {
     setWorkingId(reportId); setError('');
-    try { await moderateReport(reportId, status); load(); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Status পরিবর্তন হয়নি।'); }
+    try {
+      await moderateReport(reportId, status, notes[reportId]?.trim() || undefined);
+      setNotes((current) => ({ ...current, [reportId]: '' }));
+      load(0, false);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Status পরিবর্তন হয়নি।'); }
     finally { setWorkingId(''); }
   };
+
   return (
     <div className="page">
-      <h1>Moderator review queue</h1>
-      <p className="meta">শুধু moderator/admin অনুমোদিত account-এ এই queue কাজ করবে।</p>
+      <h1>Moderator / Admin — report control</h1>
+      <p className="meta">রিপোর্ট জমা হলেই public-এ যায়। এখান থেকে আপনি যাচাই, status update বা reject করে public feed থেকে সরাতে পারবেন। আপনার note reporter-এর Track page-এ দেখা যাবে।</p>
       {!profile && <Message error>Login করে profile সম্পূর্ণ করুন।</Message>}
-      {loading && <p className="state">Queue লোড হচ্ছে…</p>}
+      <div className="filters">
+        <button className={scope === 'pending' ? 'fchip on' : 'fchip'} onClick={() => setScope('pending')}>যাচাই বাকি</button>
+        <button className={scope === 'all' ? 'fchip on' : 'fchip'} onClick={() => setScope('all')}>সব report ({total})</button>
+      </div>
+      {loading && <p className="state">Report লোড হচ্ছে…</p>}
       {error && <Message error>{error}</Message>}
-      {!loading && !error && queue.length === 0 && <p className="state">এখন কোনো report যাচাইয়ের অপেক্ষায় নেই।</p>}
+      {!loading && !error && queue.length === 0 && <p className="state">{scope === 'pending' ? 'যাচাইয়ের অপেক্ষায় কোনো report নেই।' : 'এখনো কোনো report জমা হয়নি।'}</p>}
       <div className="feed">{queue.map((report) => (
         <article className="card" key={report.id}>
-          <div className="card-top"><span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span><span className="chip status">{report.corroborationCount} corroboration</span></div>
-          <h3>{report.title}</h3><p className="meta">{report.addressText}</p><p className="desc">{report.description}</p>
+          <div className="card-top">
+            <span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span>
+            <span className={`chip status st-${report.status}`}>{STATUS_BN[report.status] ?? report.status}</span>
+            <span className="chip status">{report.corroborationCount} corroboration</span>
+          </div>
+          <h3>{report.title}</h3>
+          <p className="meta">{report.addressText} • tracking: {report.trackingId}</p>
+          <p className="desc">{report.description}</p>
+          <label>Reporter-এর Track page-এ দেখানোর moderator note
+            <textarea rows={2} maxLength={1000} value={notes[report.id] ?? ''} onChange={(event) => setNotes((current) => ({ ...current, [report.id]: event.target.value }))} placeholder="যাচাই বা status update সম্পর্কে জানাতে লিখুন" />
+          </label>
           <div className="card-actions">
-            <button className="small-btn" disabled={workingId === report.id} onClick={() => void change(report.id, 'verified')}>যাচাই করে প্রকাশ করুন</button>
-            <button className="small-btn danger" disabled={workingId === report.id} onClick={() => void change(report.id, 'rejected')}>বাতিল করুন</button>
+            {scope === 'pending' ? (
+              <>
+                <button className="small-btn" disabled={workingId === report.id} onClick={() => void change(report.id, 'verified')}>যাচাই হয়েছে mark করুন</button>
+                <button className="small-btn danger" disabled={workingId === report.id} onClick={() => void change(report.id, 'rejected')}>Reject করে public থেকে সরান</button>
+              </>
+            ) : (
+              <>
+                <select aria-label={`${report.trackingId} report status`} value={targetStatuses[report.id] ?? report.status} disabled={workingId === report.id} onChange={(event) => setTargetStatuses((current) => ({ ...current, [report.id]: event.target.value }))}>
+                  {statusOptions.map((status) => <option key={status} value={status}>{STATUS_BN[status] ?? status}</option>)}
+                </select>
+                <button className="small-btn" disabled={workingId === report.id || ((targetStatuses[report.id] ?? report.status) === report.status && !notes[report.id]?.trim())} onClick={() => void change(report.id, targetStatuses[report.id] ?? report.status)}>Status / note update করুন</button>
+              </>
+            )}
           </div>
         </article>
       ))}</div>
+      {nextOffset !== null && <button className="small-btn" disabled={loading} onClick={() => load(nextOffset, true)}>আরও report দেখুন</button>}
     </div>
   );
 }

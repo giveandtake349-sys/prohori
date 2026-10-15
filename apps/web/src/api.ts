@@ -110,6 +110,8 @@ export interface FraudCheck {
 export interface ModerationQueue {
   queue: FeedReport[];
   count: number;
+  scope: 'pending' | 'all';
+  nextOffset: number | null;
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -244,8 +246,9 @@ export function reportFraudNumber(phoneNumber: string) {
   });
 }
 
-export function fetchModerationQueue() {
-  return get<ModerationQueue>('/api/admin/reports/queue');
+export function fetchModerationQueue(scope: 'pending' | 'all' = 'pending', offset = 0) {
+  const query = new URLSearchParams({ scope, offset: String(offset), limit: '100' });
+  return get<ModerationQueue>(`/api/admin/reports/queue?${query.toString()}`);
 }
 
 export function moderateReport(reportId: string, toStatus: string, note?: string) {
