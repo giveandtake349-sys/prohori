@@ -50,6 +50,13 @@
       "when": 1792079445514,
       "tag": "0006_daily_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792104924773,
+      "tag": "0007_solid_phil_sheldon",
+      "breakpoints": true
     }
   ]
 }

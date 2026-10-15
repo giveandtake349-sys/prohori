@@ -13,15 +13,21 @@ import {
   fetchModerationQueue,
   fetchReportByTrackingId,
   fetchReports,
+  fetchTeamDetail,
   fetchTeams,
+  fetchTeamsNearby,
   fetchThanas,
   joinTeam,
+  leaveTeam,
   moderateReport,
+  removeTeamMember,
   reportFraudNumber,
   checkFraudNumber,
   sendSos,
   setUserRole,
   submitActionClaim,
+  TEAM_TYPE_META,
+  TEAM_TYPES,
   type AdminUser,
   type AppProfile,
   type District,
@@ -34,6 +40,8 @@ import {
   type ReportDetail,
   type ReportHistory,
   type Team,
+  type TeamDetail,
+  type TeamType,
   type Thana,
 } from './api';
 import { CATEGORY_BN, CATEGORY_KEYS, STATUS_BN, TIER_BN } from './labels';
@@ -625,88 +633,97 @@ export function FraudPage({ profile }: { profile: AppProfile | null }) {
   );
 }
 
-function TeamCard({ team, profile, onJoined }: { team: Team; profile: AppProfile | null; onJoined: () => void }) {
-  const [contacts, setContacts] = useState<EmergencyContacts | null>(null);
-  const [open, setOpen] = useState(false);
-  const [phone, setPhone] = useState(profile?.phone ?? '');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const showContacts = async () => {
-    setError('');
-    try {
-      setContacts(await fetchEmergencyContacts(team.id));
-      setOpen((value) => !value);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'যোগাযোগের তথ্য পাওয়া যায়নি।');
-    }
-  };
-  const join = async () => {
-    if (!profile) { setError('Team-এ যোগ দিতে login করুন।'); return; }
-    setBusy(true); setError('');
-    try {
-      await joinTeam(team.id, phone.trim());
-      onJoined();
-      setContacts(await fetchEmergencyContacts(team.id));
-      setOpen(true);
-    } catch (err) { setError(err instanceof Error ? err.message : 'Team-এ যোগ দেওয়া যায়নি।'); }
-    finally { setBusy(false); }
-  };
-
+function TeamCard({ team }: { team: Team }) {
+  const meta = TEAM_TYPE_META[team.team_type] ?? TEAM_TYPE_META.general;
+  const area = [team.elaka_text ?? team.area_text, team.goli_text].filter(Boolean).join(', ');
   return (
-    <article className="card">
-      <h3>{team.name}</h3>
-      <p className="meta">{team.area_text ?? 'এলাকা উল্লেখ নেই'} • {team.member_count} জন সদস্য</p>
-      {team.distance_km !== null && <p className="meta">প্রায় {team.distance_km} কিমি দূরে</p>}
-      <div className="card-actions">
-        <button className="small-btn" onClick={() => void showContacts()}>জরুরি যোগাযোগ দেখুন</button>
+    <a className="team-card" href={`#/teams/${team.id}`}>
+      <div className="team-card-top">
+        <h3>{team.name}</h3>
+        <span className="team-type">{meta.emoji} {meta.bn}</span>
       </div>
-      {error && <Message error>{error.includes('403') || error.includes('only team members') ? 'এই নম্বরগুলো শুধু team member-রা দেখতে পারেন। যোগ দিতে নিচে আপনার নম্বর দিন।' : error}</Message>}
-      {!open && (
-        <div className="join-box">
-          <label>যোগাযোগের নম্বর<input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" /></label>
-          <button className="small-btn" disabled={busy || !profile || phone.trim().length < 6} onClick={() => void join()}>{busy ? 'যোগ দিচ্ছে…' : 'এই team-এ যোগ দিন'}</button>
-        </div>
-      )}
-      {open && contacts && (
-        <div className="contacts">
-          <a className="contact-row call999" href="tel:999"><b>৯৯৯ — জাতীয় জরুরি সেবা</b><span>কল করুন →</span></a>
-          {contacts.members.map((member) => (
-            <a className="contact-row" key={member.user_id} href={`tel:${member.emergency_phone}`}>
-              <b>{member.name} {member.role === 'lead' ? '(টিম লিড)' : ''}</b><span>{member.emergency_phone} →</span>
-            </a>
-          ))}
-        </div>
-      )}
-    </article>
+      <p className="meta">{area || 'এলাকা উল্লেখ নেই'} • {team.member_count} জন volunteer</p>
+      {team.distance_km !== null && <p className="meta dist">📍 প্রায় {team.distance_km} কিমি দূরে</p>}
+    </a>
   );
 }
 
 export function TeamsPage({ profile }: { profile: AppProfile | null }) {
   const [teams, setTeams] = useState<Team[]>([]);
+  const [nearby, setNearby] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyError, setNearbyError] = useState('');
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'' | TeamType>('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Creation form state
   const [showCreate, setShowCreate] = useState(false);
-  const [name, setName] = useState('');
-  const [area, setArea] = useState('');
-  const [phone, setPhone] = useState(profile?.phone ?? '');
+  const [step, setStep] = useState(1);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
   const [thanas, setThanas] = useState<Thana[]>([]);
   const [divisionId, setDivisionId] = useState('');
   const [districtId, setDistrictId] = useState('');
   const [thanaId, setThanaId] = useState('');
+  const [elaka, setElaka] = useState('');
+  const [goli, setGoli] = useState('');
+  const [pinLat, setPinLat] = useState<number | null>(null);
+  const [pinLng, setPinLng] = useState<number | null>(null);
+  const [showMap, setShowMap] = useState(false);
+  const [teamName, setTeamName] = useState('');
+  const [description, setDescription] = useState('');
+  const [phone, setPhone] = useState(profile?.phone ?? '');
+  const [teamType, setTeamType] = useState<TeamType>('general');
+  const [createError, setCreateError] = useState('');
+  const [createBusy, setCreateBusy] = useState(false);
+
+  // SOS state
   const [sosMessage, setSosMessage] = useState('');
   const [sosBusy, setSosBusy] = useState(false);
   const [sosStatus, setSosStatus] = useState('');
   const [sosError, setSosError] = useState('');
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const reload = () => {
     setLoading(true); setError('');
-    fetchTeams().then((data) => setTeams(data.teams)).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Team লোড হয়নি।')).finally(() => setLoading(false));
+    fetchTeams({ type: typeFilter || undefined, search: debouncedSearch || undefined })
+      .then((data) => setTeams(data.teams))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Team লোড হয়নি।'))
+      .finally(() => setLoading(false));
   };
-  useEffect(reload, []);
+  useEffect(reload, [typeFilter, debouncedSearch]);
+
+  const loadNearby = () => {
+    setNearbyError(''); setNearby([]);
+    if (!navigator.geolocation) { setNearbyError('এই browser GPS দেয় না।'); return; }
+    setNearbyLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        fetchTeamsNearby(position.coords.latitude, position.coords.longitude, 8, typeFilter || undefined)
+          .then((data) => {
+            let list = data.teams;
+            if (debouncedSearch) {
+              const q = debouncedSearch.toLowerCase();
+              list = list.filter((t) => t.name.toLowerCase().includes(q) || (t.elaka_text ?? t.area_text ?? '').toLowerCase().includes(q));
+            }
+            setNearby(list);
+          })
+          .catch(() => setNearbyError('আশেপাশের team লোড হয়নি।'))
+          .finally(() => setNearbyLoading(false));
+      },
+      () => { setNearbyError('লোকেশন অনুমতি দরকার। Browser location permission চালু করে আবার চেষ্টা করুন।'); setNearbyLoading(false); },
+      { enableHighAccuracy: true, timeout: 12000 },
+    );
+  };
+  useEffect(loadNearby, [typeFilter, debouncedSearch]);
+
   useEffect(() => { void fetchDivisions().then((data) => setDivisions(data.divisions)).catch(() => undefined); }, []);
   useEffect(() => {
     setDistrictId(''); setThanaId(''); setDistricts([]); setThanas([]);
@@ -717,15 +734,32 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
     if (districtId) void fetchThanas(districtId).then((data) => setThanas(data.thanas)).catch(() => undefined);
   }, [districtId]);
 
-  const onCreate = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!profile) { setError('Team তৈরি করতে login করুন।'); return; }
-    setError(''); setMessage('');
+  const step1Valid = districtId !== '' && thanaId !== '' && elaka.trim().length >= 2 && pinLat !== null && pinLng !== null;
+
+  const onCreate = async () => {
+    setCreateError('');
+    if (!profile) { setCreateError('Team তৈরি করতে login করুন।'); return; }
+    if (!step1Valid || teamName.trim().length < 3 || phone.trim().length < 6) {
+      setCreateError('লাল * চিহ্নিত সব ঘর পূরণ করুন।');
+      return;
+    }
+    setCreateBusy(true);
     try {
-      const result = await createTeam({ name: name.trim(), district_id: districtId || undefined, thana_id: thanaId || undefined, area_text: area.trim() || undefined, emergency_phone: phone.trim() });
-      setMessage(`“${result.team.name}” team তৈরি হয়েছে। আপনি team lead।`);
-      setName(''); setArea(''); setShowCreate(false); reload();
-    } catch (err) { setError(err instanceof Error ? err.message : 'Team তৈরি হয়নি।'); }
+      const result = await createTeam({
+        name: teamName.trim(),
+        district_id: districtId,
+        thana_id: thanaId,
+        elaka_text: elaka.trim(),
+        goli_text: goli.trim() || undefined,
+        lat: pinLat!,
+        lng: pinLng!,
+        description: description.trim() || undefined,
+        team_type: teamType,
+        emergency_phone: phone.trim(),
+      });
+      window.location.hash = `#/teams/${result.team.id}`;
+    } catch (err) { setCreateError(err instanceof Error ? err.message : 'Team তৈরি হয়নি।'); }
+    finally { setCreateBusy(false); }
   };
 
   const sendEmergency = () => {
@@ -755,6 +789,7 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
         </a>
         <div><h1>পাশে আছি</h1><p>আপনার মহল্লার ভলান্টিয়ার টিম — বিপদে একসাথে</p></div>
       </header>
+
       <section className="card sos-card">
         <h2>জরুরি SOS</h2>
         <p className="meta">আপনার GPS অবস্থান দিয়ে কাছের user ও team শনাক্ত হবে। এই MVP এখনো push notification বা SMS পাঠায় না—শুধু alert database-এ নথিভুক্ত করে এবং কাছের recipient গণনা করে। জীবন-ঝুঁকিতে ৯৯৯-এ কল করুন।</p>
@@ -762,24 +797,260 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
         <button className="sos-btn" onClick={sendEmergency} disabled={sosBusy || !profile}>{sosBusy ? 'অবস্থান নিচ্ছে…' : 'GPS দিয়ে SOS পাঠান'}</button>
         {sosError && <Message error>{sosError}</Message>}{sosStatus && <Message>{sosStatus}</Message>}
       </section>
-      <div className="section-heading"><h2 className="sec">ভলান্টিয়ার টিম</h2><button className="small-btn" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'ফর্ম বন্ধ' : '＋ নতুন team তৈরি'}</button></div>
+
+      <div className="teams-toolbar">
+        <div className="searchbar">
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="🔍 টিমের নাম / এলাকা লিখো…" aria-label="টিম খুঁজুন" />
+        </div>
+        <div className="typechips">
+          <button className={`tchip${typeFilter === '' ? ' on' : ''}`} onClick={() => setTypeFilter('')}>সব</button>
+          {TEAM_TYPES.map((t) => (
+            <button key={t} className={`tchip${typeFilter === t ? ' on' : ''}`} onClick={() => setTypeFilter(typeFilter === t ? '' : t)}>
+              {TEAM_TYPE_META[t].emoji} {TEAM_TYPE_META[t].bn}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="section-heading">
+        <h2 className="sec">📍 আশেপাশের টিম</h2>
+        <button className="small-btn" onClick={loadNearby} disabled={nearbyLoading}>{nearbyLoading ? 'খুঁজছে…' : '↻ রিফ্রেশ'}</button>
+      </div>
+      {nearbyError && <Message error>{nearbyError}</Message>}
+      {!nearbyError && nearbyLoading && <p className="state">আশেপাশের team খুঁজছে…</p>}
+      {!nearbyError && !nearbyLoading && nearby.length === 0 && <p className="state">আশেপাশে কোনো team পাওয়া যায়নি। নিচে সব team দেখুন।</p>}
+      <div className="feed">{nearby.map((team) => <TeamCard key={team.id} team={team} />)}</div>
+
+      <div className="section-heading">
+        <h2 className="sec">🌍 সব টিম</h2>
+        <button className="small-btn" onClick={() => { setShowCreate((v) => !v); setStep(1); }}>{showCreate ? 'ফর্ম বন্ধ' : '＋ নতুন টিম'}</button>
+      </div>
+
       {showCreate && (
-        <form className="card stack-form" onSubmit={(event) => void onCreate(event)}>
-          <h3>পাশে আছি team তৈরি করুন</h3>
-          <label>Team-এর নাম<input required minLength={3} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
-          <label>এলাকা/মহল্লা<input maxLength={300} value={area} onChange={(event) => setArea(event.target.value)} placeholder="যেমন: মিরপুর ১০" /></label>
-          <label>যোগাযোগের ফোন<input required minLength={6} maxLength={20} value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" /></label>
-          <label>বিভাগ<select value={divisionId} onChange={(event) => setDivisionId(event.target.value)}><option value="">বেছে নিন</option>{divisions.map((item) => <option key={item.id} value={item.id}>{item.name_bn}</option>)}</select></label>
-          <label>জেলা<select value={districtId} disabled={!divisionId} onChange={(event) => setDistrictId(event.target.value)}><option value="">বেছে নিন</option>{districts.map((item) => <option key={item.id} value={item.id}>{item.name_bn}</option>)}</select></label>
-          <label>থানা<select value={thanaId} disabled={!districtId} onChange={(event) => setThanaId(event.target.value)}><option value="">বেছে নিন</option>{thanas.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          {!profile && <Message error>Team তৈরি করতে login করুন।</Message>}
-          <button className="primary-btn" type="submit" disabled={!profile}>Team তৈরি করুন</button>
-        </form>
+        <div className="card stack-form">
+          <div className="form-steps"><div className={`form-step${step >= 1 ? ' on' : ''}`} /><div className={`form-step${step >= 2 ? ' on' : ''}`} /></div>
+          {step === 1 && (
+            <>
+              <h3>নতুন টিম — লোকেশন</h3>
+              <label>বিভাগ
+                <select value={divisionId} onChange={(event) => setDivisionId(event.target.value)}>
+                  <option value="">বেছে নিন</option>
+                  {divisions.map((item) => <option key={item.id} value={item.id}>{item.name_bn}</option>)}
+                </select>
+              </label>
+              <div className="loc-grid">
+                <label>জেলা <span className="req">*</span>
+                  <select value={districtId} disabled={!divisionId} onChange={(event) => setDistrictId(event.target.value)}>
+                    <option value="">বেছে নিন</option>
+                    {districts.map((item) => <option key={item.id} value={item.id}>{item.name_bn}</option>)}
+                  </select>
+                </label>
+                <label>থানা <span className="req">*</span>
+                  <select value={thanaId} disabled={!districtId} onChange={(event) => setThanaId(event.target.value)}>
+                    <option value="">বেছে নিন</option>
+                    {thanas.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="loc-grid">
+                <label>এলাকা <span className="req">*</span>
+                  <input value={elaka} onChange={(event) => setElaka(event.target.value)} placeholder="যেমন: মিরপুর ১০, ব্লক C" maxLength={200} />
+                </label>
+                <label>গলি / রোড
+                  <input value={goli} onChange={(event) => setGoli(event.target.value)} placeholder="ঐচ্ছিক" maxLength={200} />
+                </label>
+              </div>
+              {!showMap && (
+                <button type="button" className="gps-btn" onClick={() => setShowMap(true)}>
+                  📍 Map-এ টিমের location pin করো <span className="req">*</span>
+                </button>
+              )}
+              {showMap && (
+                <div className="map-wrap">
+                  <MapPicker lat={pinLat} lng={pinLng} onPick={(la, ln) => { setPinLat(la); setPinLng(ln); }} />
+                  {pinLat !== null && <p className="meta ok">✓ Pin বসেছে ({pinLat.toFixed(4)}, {pinLng!.toFixed(4)})</p>}
+                </div>
+              )}
+              <button className="primary-btn" disabled={!step1Valid} onClick={() => setStep(2)}>পরবর্তী →</button>
+            </>
+          )}
+          {step === 2 && (
+            <>
+              <h3>নতুন টিম — তথ্য</h3>
+              <label>টিমের নাম <span className="req">*</span>
+                <input required minLength={3} maxLength={120} value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="যেমন: মিরপুর ১০ যুব সংঘ" />
+              </label>
+              <label>Emergency phone <span className="req">*</span>
+                <input required minLength={6} maxLength={20} value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" placeholder="01XXXXXXXXX" />
+              </label>
+              <label>বিবরণ
+                <textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="টিম সম্পর্কে লিখো (ঐচ্ছিক)" maxLength={1000} />
+              </label>
+              <label>টিমের ধরন <span className="req">*</span></label>
+              <div className="type-grid">
+                {TEAM_TYPES.map((t) => (
+                  <button type="button" key={t} className={`type-opt${teamType === t ? ' on' : ''}`} onClick={() => setTeamType(t)}>
+                    <span className="type-emoji">{TEAM_TYPE_META[t].emoji}</span>
+                    <span>{TEAM_TYPE_META[t].bn}</span>
+                  </button>
+                ))}
+              </div>
+              {!profile && <Message error>Team তৈরি করতে login করুন।</Message>}
+              {createError && <Message error>{createError}</Message>}
+              <div className="form-nav">
+                <button className="small-btn" onClick={() => setStep(1)}>← পেছনে</button>
+                <button className="primary-btn" disabled={!profile || createBusy} onClick={() => void onCreate()}>
+                  {createBusy ? 'তৈরি হচ্ছে…' : '✓ টিম তৈরি করো'}
+                </button>
+              </div>
+              <p className="meta">তুমি হবে এই টিমের <b>lead</b>।</p>
+            </>
+          )}
+        </div>
       )}
-      {message && <Message>{message}</Message>}{error && <Message error>{error}</Message>}
+
+      {error && <Message error>{error}</Message>}
       {loading && <p className="state">Team লোড হচ্ছে…</p>}
-      {!loading && !error && teams.length === 0 && <p className="state">এখনো কোনো team নেই। প্রথম team তৈরি করুন।</p>}
-      <div className="feed">{teams.map((team) => <TeamCard key={team.id} team={team} profile={profile} onJoined={reload} />)}</div>
+      {!loading && !error && teams.length === 0 && <p className="state">কোনো team পাওয়া যায়নি। প্রথম team তৈরি করুন।</p>}
+      <div className="feed">{teams.map((team) => <TeamCard key={team.id} team={team} />)}</div>
+    </div>
+  );
+}
+
+export function TeamDetailPage({ teamId, profile }: { teamId: string; profile: AppProfile | null }) {
+  const [detail, setDetail] = useState<TeamDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [phone, setPhone] = useState(profile?.phone ?? '');
+  const [busy, setBusy] = useState(false);
+  const [isMember, setIsMember] = useState(false);
+  const [isLead, setIsLead] = useState(false);
+
+  const reload = () => {
+    setLoading(true); setError('');
+    fetchTeamDetail(teamId)
+      .then((data) => {
+        setDetail(data);
+        const me = data.roster.find((m) => profile && m.user_id === profile.id);
+        setIsMember(!!me);
+        setIsLead(me?.role === 'lead');
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Team লোড হয়নি।'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(reload, [teamId]);
+
+  const join = async () => {
+    if (!profile) { setError('Team-এ যোগ দিতে login করুন।'); return; }
+    if (phone.trim().length < 6) { setError('যোগাযোগের সঠিক নম্বর দিন।'); return; }
+    setBusy(true); setError('');
+    try { await joinTeam(teamId, phone.trim()); reload(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Team-এ যোগ দেওয়া যায়নি।'); }
+    finally { setBusy(false); }
+  };
+
+  const leave = async () => {
+    if (!window.confirm('এই team ছেড়ে দেবে?')) return;
+    setBusy(true); setError('');
+    try { await leaveTeam(teamId); reload(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Team ছাড়া যায়নি।'); }
+    finally { setBusy(false); }
+  };
+
+  const removeMember = async (userId: string, name: string) => {
+    if (!window.confirm(`${name}-কে team থেকে সরিয়ে দেবে?`)) return;
+    try { await removeTeamMember(teamId, userId); reload(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'সরানো যায়নি।'); }
+  };
+
+  if (loading) return <div className="page"><p className="state">Team লোড হচ্ছে…</p></div>;
+  if (error || !detail) return <div className="page"><p className="state err">{error || 'Team পাওয়া যায়নি।'}</p><a className="back-arrow" href="#/teams" aria-label="ফিরে যাও">‹ টিমে ফিরে যাও</a></div>;
+
+  const { team, roster } = detail;
+  const meta = TEAM_TYPE_META[team.team_type] ?? TEAM_TYPE_META.general;
+  const area = [team.elaka_text ?? team.area_text, team.goli_text, team.thana_name, team.district_name].filter(Boolean).join(', ');
+
+  return (
+    <div className="page">
+      <header className="hero page-hero">
+        <a className="back-arrow" href="#/teams" aria-label="ফিরে যাও">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+        </a>
+        <div>
+          <p className="hero-kicker">{meta.emoji} {meta.bn} টিম</p>
+          <h1>{team.name}</h1>
+          <p>{area}</p>
+        </div>
+      </header>
+
+      {team.description && <section className="card"><p>{team.description}</p></section>}
+
+      <div className="stat-row">
+        <div className="stat"><b>{roster.length}</b><small>volunteer</small></div>
+        <div className="stat"><b>{team.distance_km !== null ? `${team.distance_km}km` : '—'}</b><small>দূরত্ব</small></div>
+        <div className="stat"><b>০</b><small>SOS responded</small></div>
+      </div>
+
+      <section className="card sos-card">
+        <h2>🚨 Emergency যোগাযোগ</h2>
+        {isMember ? (
+          <TeamContacts teamId={teamId} />
+        ) : (
+          <p className="meta">যোগাযোগের নম্বর শুধু team member-রা দেখতে পারেন। নিচে Join করো।</p>
+        )}
+        <a className="contact-row call999" href="tel:999"><b>৯৯৯ — জাতীয় জরুরি সেবা</b><span>কল করুন →</span></a>
+      </section>
+
+      <div className="section-heading"><h2 className="sec">সদস্যরা ({roster.length})</h2></div>
+      {roster.length === 0 && <p className="state">এখনো কোনো সদস্য নেই।</p>}
+      {roster.map((m) => (
+        <div className="member-row" key={m.user_id}>
+          <div className="avatar">👤</div>
+          <div className="member-info"><b>{m.name}{m.role === 'lead' && <span className="lead-tag">LEAD</span>}</b></div>
+          {isLead && m.role !== 'lead' && (
+            <button className="small-btn danger" onClick={() => void removeMember(m.user_id, m.name)}>সরাও</button>
+          )}
+        </div>
+      ))}
+
+      <div className="detail-actions">
+        {!isMember && (
+          <div className="join-box">
+            <label>যোগাযোগের নম্বর <span className="req">*</span>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="01XXXXXXXXX" />
+            </label>
+            <button className="primary-btn" disabled={busy || !profile} onClick={() => void join()}>
+              {busy ? 'যোগ দিচ্ছে…' : 'এই team-এ যোগ দিন'}
+            </button>
+            {!profile && <p className="meta">Join করতে login করুন।</p>}
+          </div>
+        )}
+        {isMember && !isLead && (
+          <button className="small-btn" disabled={busy} onClick={() => void leave()}>Team ছেড়ে দাও</button>
+        )}
+      </div>
+      {error && <Message error>{error}</Message>}
+    </div>
+  );
+}
+
+function TeamContacts({ teamId }: { teamId: string }) {
+  const [contacts, setContacts] = useState<EmergencyContacts | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    fetchEmergencyContacts(teamId)
+      .then(setContacts)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'যোগাযোগের তথ্য পাওয়া যায়নি।'));
+  }, [teamId]);
+  if (error) return <p className="meta err">{error}</p>;
+  if (!contacts) return <p className="meta">লোড হচ্ছে…</p>;
+  return (
+    <div className="contacts">
+      {contacts.members.map((member) => (
+        <a className="contact-row" key={member.user_id} href={`tel:${member.emergency_phone}`}>
+          <b>{member.name} {member.role === 'lead' ? '(টিম লিড)' : ''}</b><span>{member.emergency_phone} →</span>
+        </a>
+      ))}
     </div>
   );
 }

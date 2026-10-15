@@ -46,15 +46,50 @@ export interface ReportDetail {
   history: HistoryItem[];
 }
 
+export const TEAM_TYPES = [
+  'general',
+  'medical',
+  'blood',
+  'women_child',
+  'disaster',
+  'night_patrol',
+  'road',
+] as const;
+export type TeamType = (typeof TEAM_TYPES)[number];
+
+export const TEAM_TYPE_META: Record<TeamType, { emoji: string; bn: string }> = {
+  general: { emoji: '🛡️', bn: 'সাধারণ' },
+  medical: { emoji: '🏥', bn: 'মেডিকেল' },
+  blood: { emoji: '🩸', bn: 'রক্তদান' },
+  women_child: { emoji: '👩‍👧', bn: 'নারী ও শিশু' },
+  disaster: { emoji: '🌊', bn: 'দুর্যোগ' },
+  night_patrol: { emoji: '🌙', bn: 'নাইট প্যাট্রল' },
+  road: { emoji: '🚗', bn: 'সড়ক দুর্ঘটনা' },
+};
+
 export interface Team {
   id: string;
   name: string;
   district_id: string | null;
   thana_id: string | null;
   area_text: string | null;
+  elaka_text: string | null;
+  goli_text: string | null;
+  lat: number | null;
+  lng: number | null;
+  description: string | null;
+  team_type: TeamType;
+  is_active: boolean;
   member_count: number;
   distance_km: number | null;
   created_at: string;
+  district_name?: string | null;
+  thana_name?: string | null;
+}
+
+export interface TeamDetail {
+  team: Team;
+  roster: { user_id: string; name: string; role: string; joined_at: string }[];
 }
 
 export interface TeamMember {
@@ -146,6 +181,10 @@ function patch<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
+function del<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'DELETE' });
+}
+
 export function fetchProfile() {
   return get<{ auth: { id: string; email: string | null }; profile: AppProfile | null }>('/api/auth/me');
 }
@@ -192,16 +231,50 @@ export function submitActionClaim(reportId: string, claim: 'action_taken' | 'no_
   );
 }
 
-export function fetchTeams(): Promise<{ teams: Team[]; count: number }> {
-  return get('/api/teams?limit=100');
+export function fetchTeams(params?: { type?: string; search?: string; district_id?: string; thana_id?: string }): Promise<{ teams: Team[]; count: number }> {
+  const q = new URLSearchParams({ limit: '50' });
+  if (params?.type) q.set('type', params.type);
+  if (params?.search) q.set('search', params.search);
+  if (params?.district_id) q.set('district_id', params.district_id);
+  if (params?.thana_id) q.set('thana_id', params.thana_id);
+  return get(`/api/teams?${q.toString()}`);
+}
+
+export function fetchTeamsNearby(lat: number, lng: number, radiusKm = 8, type?: string): Promise<{ teams: Team[]; count: number }> {
+  const q = new URLSearchParams({ lat: String(lat), lng: String(lng), radius_km: String(radiusKm) });
+  if (type) q.set('type', type);
+  return get(`/api/teams/nearby?${q.toString()}`);
+}
+
+export function fetchTeamDetail(teamId: string): Promise<TeamDetail> {
+  return get(`/api/teams/${encodeURIComponent(teamId)}`);
 }
 
 export function fetchEmergencyContacts(teamId: string): Promise<EmergencyContacts> {
   return get(`/api/teams/${encodeURIComponent(teamId)}/emergency-contacts`);
 }
 
-export function createTeam(input: { name: string; district_id?: string; thana_id?: string; area_text?: string; emergency_phone?: string }) {
+export function createTeam(input: {
+  name: string;
+  district_id: string;
+  thana_id: string;
+  elaka_text: string;
+  goli_text?: string;
+  lat: number;
+  lng: number;
+  description?: string;
+  team_type: TeamType;
+  emergency_phone: string;
+}) {
   return post<{ team: { id: string; name: string }; lead_user_id: string }>('/api/teams', input);
+}
+
+export function leaveTeam(teamId: string) {
+  return del<{ left: boolean }>(`/api/teams/${encodeURIComponent(teamId)}/leave`);
+}
+
+export function removeTeamMember(teamId: string, userId: string) {
+  return del<{ removed: boolean }>(`/api/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`);
 }
 
 export function joinTeam(teamId: string, emergencyPhone: string) {

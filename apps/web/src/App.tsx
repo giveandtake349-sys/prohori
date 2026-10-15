@@ -6,6 +6,7 @@ import {
   HomePage,
   ModerationPage,
   NewReportPage,
+  TeamDetailPage,
   TeamsPage,
   TrackPage,
   TrackSearchPage,
@@ -212,6 +213,8 @@ function Shell() {
     page = <NewReportPage signedIn={signedIn} />;
   } else if (routePath === '/teams') {
     page = <TeamsPage profile={profile} />;
+  } else if (routePath.startsWith('/teams/')) {
+    page = <TeamDetailPage teamId={decodeURIComponent(routePath.slice('/teams/'.length))} profile={profile} />;
   } else if (routePath === '/fraud') {
     page = <FraudPage profile={profile} />;
   } else if (routePath === '/track') {

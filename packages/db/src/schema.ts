@@ -164,6 +164,15 @@ export const volunteerTeams = pgTable('volunteer_teams', {
   districtId: uuid('district_id').references(() => districts.id),
   thanaId: uuid('thana_id').references(() => thanas.id),
   areaText: text('area_text'),
+  // Exact team location (map pin at creation). Used for nearby queries.
+  lat: doublePrecision('lat'),
+  lng: doublePrecision('lng'),
+  elakaText: text('elaka_text'),
+  goliText: text('goli_text'),
+  description: text('description'),
+  // Team type: general | medical | blood | women_child | disaster | night_patrol | road
+  teamType: text('team_type').notNull().default('general'),
+  isActive: boolean('is_active').notNull().default(true),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
