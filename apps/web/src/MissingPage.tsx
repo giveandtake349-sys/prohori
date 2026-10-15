@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { fetchMissingPersons, createMissingPerson, markMissingFound, type MissingPerson } from './api';
+import { supabase } from './supabaseClient';
 import { useLang } from './i18n';
 
 function PersonCard({ p, onChanged }: { p: MissingPerson; onChanged: () => void }) {
@@ -68,7 +69,9 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
-  const [photoUrl, setPhotoUrl] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [uploadErr, setUploadErr] = useState('');
   const [lastSeenText, setLastSeenText] = useState('');
   const [lastSeenDate, setLastSeenDate] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -86,30 +89,56 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
 
   useEffect(load, [filter]);
 
+  const onPickPhoto = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { setUploadErr('শুধু ছবি ফাইল দিন।'); return; }
+    if (f.size > 5 * 1024 * 1024) { setUploadErr('ছবি ৫MB-এর কম হতে হবে।'); return; }
+    setUploadErr('');
+    setPhotoFile(f);
+    setPhotoPreview(URL.createObjectURL(f));
+  };
+
   const submit = () => {
     setFormErr('');
-    if (!signedIn) return setFormErr('বোর্ডে যোগ করতে login করুন।');
+    if (!signedIn) return setFormErr('বোর্ডে যোগ করতে login করুন.');
     if (name.trim().length < 2) return setFormErr('নাম লিখুন।');
     if (contactPhone.trim().length < 6) return setFormErr('যোগাযোগের নম্বর দিন।');
     setSubmitting(true);
-    createMissingPerson({
-      name: name.trim(),
-      age: age ? Number(age) : null,
-      gender: gender || null,
-      photo_url: photoUrl.trim() || null,
-      last_seen_text: lastSeenText.trim() || null,
-      last_seen_date: lastSeenDate ? new Date(lastSeenDate).toISOString() : null,
-      contact_phone: contactPhone.trim(),
-    })
-      .then(() => {
+    (async () => {
+      try {
+        let finalPhotoUrl: string | null = null;
+        if (photoFile) {
+          const ext = (photoFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+          const path = `missing/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+          const { error: upErr } = await supabase.storage.from('report-media').upload(path, photoFile, {
+            contentType: photoFile.type,
+            upsert: false,
+          });
+          if (upErr) throw new Error('ছবি আপলোড হয়নি: ' + upErr.message);
+          finalPhotoUrl = supabase.storage.from('report-media').getPublicUrl(path).data.publicUrl;
+        }
+        await createMissingPerson({
+          name: name.trim(),
+          age: age ? Number(age) : null,
+          gender: gender || null,
+          photo_url: finalPhotoUrl,
+          last_seen_text: lastSeenText.trim() || null,
+          last_seen_date: lastSeenDate ? new Date(lastSeenDate).toISOString() : null,
+          contact_phone: contactPhone.trim(),
+        });
         setShowForm(false);
-        setName(''); setAge(''); setGender(''); setPhotoUrl('');
+        setName(''); setAge(''); setGender('');
+        setPhotoFile(null); setPhotoPreview(''); setUploadErr('');
         setLastSeenText(''); setLastSeenDate(''); setContactPhone('');
         setFilter('missing');
         load();
-      })
-      .catch((e: unknown) => setFormErr(e instanceof Error ? e.message : 'জমা দেওয়া যায়নি'))
-      .finally(() => setSubmitting(false));
+      } catch (e: unknown) {
+        setFormErr(e instanceof Error ? e.message : 'জমা দেওয়া যায়নি');
+      } finally {
+        setSubmitting(false);
+      }
+    })();
   };
 
   return (
@@ -149,8 +178,20 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
               </select>
             </div>
           </div>
-          <label className="form-label">ছবির লিংক (ঐচ্ছিক)</label>
-          <input className="input" value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="https://…" />
+          <label className="form-label">ছবি (ঐচ্ছিক)</label>
+          <label className="upload-box">
+            <input type="file" accept="image/*" hidden onChange={onPickPhoto} />
+            {photoPreview ? (
+              <img className="upload-prev" src={photoPreview} alt="ছবির প্রিভিউ" />
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
+              </svg>
+            )}
+            <b>{photoPreview ? 'ছবি selected ✓' : 'ছবি আপলোড করো'}</b>
+            <small>ফোন থেকে সরাসরি — লিংক লাগবে না</small>
+          </label>
+          {uploadErr && <p className="state err">{uploadErr}</p>}
           <label className="form-label">সর্বশেষ কোথায় দেখা গেছে</label>
           <input className="input" value={lastSeenText} onChange={(e) => setLastSeenText(e.target.value)} placeholder="যেমন: গুলিস্তান বাস স্ট্যান্ড" maxLength={300} />
           <label className="form-label">সর্বশেষ দেখার তারিখ</label>

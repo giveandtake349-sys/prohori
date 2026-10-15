@@ -184,10 +184,6 @@ export function HomePage({ signedIn }: { signedIn: boolean }) {
         <p>জনতার চোখ — অপরাধ দেখলে চুপ নয়</p>
         <p className="hero-intro">নিরাপদে রিপোর্ট করুন, তথ্য যাচাই করুন, আর আপনার এলাকার মানুষের পাশে দাঁড়ান।</p>
       </header>
-      <div className="sos-strip">
-        <div><b>জরুরি বিপদে?</b><small>এক চাপে সবাইকে জানাও</small></div>
-        <a className="btn-sos" href="#/teams">SOS</a>
-      </div>
       <div className="quick-actions">
         <a className="quick-action" href="#/reports/new">＋ রিপোর্ট জমা দিন</a>
         <a className="quick-action" href="#/teams">পাশে আছি টিম</a>
@@ -424,6 +420,7 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
   const [accusedName, setAccusedName] = useState('');
   const [anonymous, setAnonymous] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number; address: string; districtId?: string } | null>(null);
+  const [showMap, setShowMap] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [trackingId, setTrackingId] = useState('');
@@ -549,8 +546,23 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
           <div>
             <p className="field-label">ঘটনার অবস্থান *</p>
             <LocationSelectors onLocation={setLocation} />
-            <p className="meta">অথবা ম্যাপে পিন বসান:</p>
-            <MapPicker lat={location?.lat ?? null} lng={location?.lng ?? null} onPick={pickOnMap} />
+            <button
+              type="button"
+              className={location ? 'gps-btn done' : 'gps-btn'}
+              onClick={() => setShowMap((v) => !v)}
+              aria-expanded={showMap}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" />
+              </svg>
+              {location ? `✓ অবস্থান নেওয়া হয়েছে` : 'GPS দিয়ে সুনির্দিষ্ট অবস্থান নিন'}
+            </button>
+            {showMap && (
+              <div className="map-wrap">
+                <p className="meta">ম্যাপে পিন বসান:</p>
+                <MapPicker lat={location?.lat ?? null} lng={location?.lng ?? null} onPick={pickOnMap} />
+              </div>
+            )}
             {location && <p className="location-summary">নির্বাচিত অবস্থান: {location.address} ({location.lat.toFixed(4)}, {location.lng.toFixed(4)})</p>}
             {location && <NearbyBox lat={location.lat} lng={location.lng} />}
           </div>
@@ -737,7 +749,12 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
 
   return (
     <div className="page">
-      <header className="hero"><h1>পাশে আছি</h1><p>আপনার মহল্লার ভলান্টিয়ার টিম — বিপদে একসাথে</p></header>
+      <header className="hero page-hero">
+        <a className="back-arrow" href="#/" aria-label="ফিরে যাও">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+        </a>
+        <div><h1>পাশে আছি</h1><p>আপনার মহল্লার ভলান্টিয়ার টিম — বিপদে একসাথে</p></div>
+      </header>
       <section className="card sos-card">
         <h2>জরুরি SOS</h2>
         <p className="meta">আপনার GPS অবস্থান দিয়ে কাছের user ও team শনাক্ত হবে। এই MVP এখনো push notification বা SMS পাঠায় না—শুধু alert database-এ নথিভুক্ত করে এবং কাছের recipient গণনা করে। জীবন-ঝুঁকিতে ৯৯৯-এ কল করুন।</p>

@@ -4,15 +4,15 @@ import { useLang } from './i18n';
 import { CATEGORY_KEYS } from './labels';
 
 const PALETTE: Record<string, string> = {
-  khun: '#d92632',
-  ghum: '#7b5cff',
-  churi: '#e8930c',
-  dakati: '#b3541e',
-  dhorshon: '#c026d3',
-  eveteasing: '#1f6feb',
-  madok: '#0e9f8a',
-  durniti: '#64748b',
-  other: '#9aa7b5',
+  khun: 'var(--trend-khun)',
+  ghum: 'var(--trend-ghum)',
+  churi: 'var(--trend-churi)',
+  dakati: 'var(--trend-dakati)',
+  dhorshon: 'var(--trend-dhorshon)',
+  eveteasing: 'var(--trend-eveteasing)',
+  madok: 'var(--trend-madok)',
+  durniti: 'var(--trend-durniti)',
+  other: 'var(--trend-other)',
 };
 
 function WeeklyChart({ trends }: { trends: Trends }) {
@@ -31,8 +31,8 @@ function WeeklyChart({ trends }: { trends: Trends }) {
         const y = y0 - maxTotal * f * scale;
         return (
           <g key={f}>
-            <line x1={PL} y1={y} x2={W - 6} y2={y} stroke="#e3e8ee" />
-            <text x={PL - 5} y={y + 4} fontSize="10" textAnchor="end" fill="#9aa7b5">
+            <line x1={PL} y1={y} x2={W - 6} y2={y} className="grid-line" />
+            <text x={PL - 5} y={y + 4} fontSize="10" textAnchor="end">
               {Math.round(maxTotal * f)}
             </text>
           </g>
@@ -48,15 +48,15 @@ function WeeklyChart({ trends }: { trends: Trends }) {
               const h = v * scale;
               const y = y0 - (acc + v) * scale;
               acc += v;
-              return <rect key={c} x={x} y={y} width={bw} height={Math.max(h, 0.5)} fill={PALETTE[c] ?? '#9aa7b5'} rx="2" />;
+              return <rect key={c} x={x} y={y} width={bw} height={Math.max(h, 0.5)} fill={PALETTE[c] ?? 'var(--trend-other)'} rx="2" />;
             })}
             {w.total > 0 && (
-              <text x={x + bw / 2} y={y0 - w.total * scale - 5} fontSize="10" textAnchor="middle" fill="#33404f" fontWeight="700">
+              <text x={x + bw / 2} y={y0 - w.total * scale - 5} fontSize="10" textAnchor="middle" fill="var(--ink)" fontWeight="700">
                 {w.total}
               </text>
             )}
             {i % 2 === 0 && (
-              <text x={x + bw / 2} y={H - 12} fontSize="9.5" textAnchor="middle" fill="#9aa7b5">
+              <text x={x + bw / 2} y={H - 12} fontSize="9.5" textAnchor="middle">
                 {w.week_start.slice(5)}
               </text>
             )}
@@ -67,7 +67,7 @@ function WeeklyChart({ trends }: { trends: Trends }) {
         {CATEGORY_KEYS.filter((c) => weeks.some((w) => (w.counts[c] ?? 0) > 0)).map((c, i) => (
           <g key={c} transform={`translate(${PL + i * 108}, 2)`}>
             <rect width="10" height="10" rx="2" fill={PALETTE[c]} />
-            <text x="14" y="9.5" fontSize="10.5" fill="#33404f">{label('category', c)}</text>
+            <text x="14" y="9.5" fontSize="10.5" fill="var(--ink)">{label('category', c)}</text>
           </g>
         ))}
       </g>
@@ -86,11 +86,11 @@ function DistrictChart({ trends }: { trends: Trends }) {
         const w = ((W - PL - 44) * r.count) / max;
         return (
           <g key={r.district_id ?? 'unknown'} transform={`translate(0, ${i * RH + 4})`}>
-            <text x={PL - 8} y={17} fontSize="11.5" textAnchor="end" fill="#33404f">
+            <text x={PL - 8} y={17} fontSize="11.5" textAnchor="end" fill="var(--ink)">
               {(r.district_name ?? 'অজানা').slice(0, 18)}
             </text>
-            <rect x={PL} y={4} width={Math.max(w, 2)} height={16} rx={8} fill="#1f6feb" />
-            <text x={PL + w + 7} y={17} fontSize="11.5" fill="#33404f" fontWeight="700">{r.count}</text>
+            <rect x={PL} y={4} width={Math.max(w, 2)} height={16} rx={8} fill="var(--blue)" />
+            <text x={PL + w + 7} y={17} fontSize="11.5" fill="var(--ink)" fontWeight="700">{r.count}</text>
           </g>
         );
       })}
