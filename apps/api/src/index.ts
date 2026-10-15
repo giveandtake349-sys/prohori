@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
+import { authRouter } from './routes/auth.js';
 import { reportsRouter } from './routes/reports.js';
 import { fraudRouter } from './routes/fraud.js';
 import { thanasRouter } from './routes/thanas.js';
@@ -19,6 +20,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ ok: true, service: 'prohori-api', time: new Date().toISOString() });
 });
 
+app.use('/api/auth', authRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/fraud-numbers', fraudRouter);
 app.use('/api/thanas', thanasRouter);

@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { eq, and, count } from 'drizzle-orm';
 import { db } from '../db.js';
+import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, isPgUniqueViolation, uuidParam } from '../validate.js';
 import { haversineKm } from '../lib/geo.js';
 import { volunteerTeams, teamMembers, users, thanas, districts } from 'db';
@@ -13,7 +14,6 @@ const createTeamSchema = z.object({
   district_id: z.string().uuid().nullable().optional(),
   thana_id: z.string().uuid().nullable().optional(),
   area_text: z.string().max(300).nullable().optional(),
-  created_by: z.string().uuid(),
   // Lead's emergency contact number; defaults to their account phone.
   emergency_phone: z.string().min(6).max(20).optional(),
 });
@@ -21,6 +21,8 @@ const createTeamSchema = z.object({
 // POST /api/teams — create a "Pashe Achi" team; creator becomes the lead.
 teamsRouter.post(
   '/',
+  requireAuth,
+  requireProfile,
   validateBody(createTeamSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -28,11 +30,7 @@ teamsRouter.post(
       const [creator] = await db
         .select({ id: users.id, phone: users.phone })
         .from(users)
-        .where(eq(users.id, b.created_by));
-      if (!creator) {
-        res.status(404).json({ error: 'creator not found' });
-        return;
-      }
+        .where(eq(users.id, req.appProfile!.id));
       if (b.district_id) {
         const [d] = await db.select({ id: districts.id }).from(districts).where(eq(districts.id, b.district_id));
         if (!d) {
@@ -54,12 +52,12 @@ teamsRouter.post(
           districtId: b.district_id ?? null,
           thanaId: b.thana_id ?? null,
           areaText: b.area_text ?? null,
-          createdBy: b.created_by,
+          createdBy: req.appProfile!.id,
         })
         .returning();
       await db.insert(teamMembers).values({
         teamId: team.id,
-        userId: b.created_by,
+        userId: req.appProfile!.id,
         role: 'lead',
         emergencyPhone: b.emergency_phone ?? creator.phone,
       });
@@ -71,7 +69,7 @@ teamsRouter.post(
           thana_id: team.thanaId,
           area_text: team.areaText,
         },
-        lead_user_id: b.created_by,
+        lead_user_id: req.appProfile!.id,
       });
     } catch (e) {
       next(e);
@@ -80,33 +78,29 @@ teamsRouter.post(
 );
 
 const joinTeamSchema = z.object({
-  user_id: z.string().uuid(),
   emergency_phone: z.string().min(6).max(20),
 });
 
 // POST /api/teams/:id/join — join a team as a member.
 teamsRouter.post(
   '/:id/join',
+  requireAuth,
+  requireProfile,
   validateBody(joinTeamSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = uuidParam(req, res, 'id');
       if (!id) return;
-      const { user_id, emergency_phone } = req.body as z.infer<typeof joinTeamSchema>;
+      const { emergency_phone } = req.body as z.infer<typeof joinTeamSchema>;
       const [team] = await db.select({ id: volunteerTeams.id }).from(volunteerTeams).where(eq(volunteerTeams.id, id));
       if (!team) {
         res.status(404).json({ error: 'team not found' });
         return;
       }
-      const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, user_id));
-      if (!user) {
-        res.status(404).json({ error: 'user not found' });
-        return;
-      }
       try {
         await db.insert(teamMembers).values({
           teamId: id,
-          userId: user_id,
+          userId: req.appProfile!.id,
           role: 'member',
           emergencyPhone: emergency_phone,
         });
@@ -117,7 +111,7 @@ teamsRouter.post(
         }
         throw e;
       }
-      res.status(201).json({ team_id: id, user_id, role: 'member' });
+      res.status(201).json({ team_id: id, user_id: req.appProfile!.id, role: 'member' });
     } catch (e) {
       next(e);
     }
@@ -223,13 +217,21 @@ async function listMembers(teamId: string) {
 }
 
 // GET /api/teams/:id/members — team roster (emergency phones included).
-teamsRouter.get('/:id/members', async (req: Request, res: Response, next: NextFunction) => {
+teamsRouter.get('/:id/members', requireAuth, requireProfile, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = uuidParam(req, res, 'id');
     if (!id) return;
     const [team] = await db.select({ id: volunteerTeams.id }).from(volunteerTeams).where(eq(volunteerTeams.id, id));
     if (!team) {
       res.status(404).json({ error: 'team not found' });
+      return;
+    }
+    const [membership] = await db
+      .select({ id: teamMembers.id })
+      .from(teamMembers)
+      .where(and(eq(teamMembers.teamId, id), eq(teamMembers.userId, req.appProfile!.id)));
+    if (!membership) {
+      res.status(403).json({ error: 'only team members can view emergency contact numbers' });
       return;
     }
     res.json({ members: await listMembers(id) });
@@ -240,7 +242,7 @@ teamsRouter.get('/:id/members', async (req: Request, res: Response, next: NextFu
 
 // GET /api/teams/:id/emergency-contacts — 999 + member emergency numbers.
 // Shown on the big red call screen during an emergency.
-teamsRouter.get('/:id/emergency-contacts', async (req: Request, res: Response, next: NextFunction) => {
+teamsRouter.get('/:id/emergency-contacts', requireAuth, requireProfile, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = uuidParam(req, res, 'id');
     if (!id) return;
@@ -250,6 +252,14 @@ teamsRouter.get('/:id/emergency-contacts', async (req: Request, res: Response, n
       .where(eq(volunteerTeams.id, id));
     if (!team) {
       res.status(404).json({ error: 'team not found' });
+      return;
+    }
+    const [membership] = await db
+      .select({ id: teamMembers.id })
+      .from(teamMembers)
+      .where(and(eq(teamMembers.teamId, id), eq(teamMembers.userId, req.appProfile!.id)));
+    if (!membership) {
+      res.status(403).json({ error: 'only team members can view emergency contact numbers' });
       return;
     }
     res.json({

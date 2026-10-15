@@ -2,11 +2,12 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { eq, and, inArray, desc } from 'drizzle-orm';
 import { db } from '../db.js';
+import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, isPgUniqueViolation, pathParam, uuidParam } from '../validate.js';
 import { generateTrackingId } from '../lib/tracking.js';
 import { haversineKm } from '../lib/geo.js';
 import { publicReportColumns, PUBLIC_STATUSES, CATEGORIES } from '../lib/public.js';
-import { reports, reportMedia, corroborations, actionClaims, statusHistory, users, districts } from 'db';
+import { reports, reportMedia, corroborations, actionClaims, statusHistory, districts } from 'db';
 
 export const reportsRouter = Router();
 
@@ -17,7 +18,6 @@ const mediaSchema = z.object({
 });
 
 const createReportSchema = z.object({
-  reporter_id: z.string().uuid().nullable().optional(),
   category: z.enum(CATEGORIES),
   title: z.string().min(3).max(200),
   description: z.string().min(10).max(5000),
@@ -34,19 +34,13 @@ const createReportSchema = z.object({
 // POST /api/reports — submit a report (anonymous allowed: reporter_id null)
 reportsRouter.post(
   '/',
+  requireAuth,
+  requireProfile,
   validateBody(createReportSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const b = req.body as z.infer<typeof createReportSchema>;
       const anonymous = b.is_anonymous === true;
-
-      if (b.reporter_id && !anonymous) {
-        const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, b.reporter_id));
-        if (!u) {
-          res.status(404).json({ error: 'reporter not found' });
-          return;
-        }
-      }
       if (b.district_id) {
         const [d] = await db.select({ id: districts.id }).from(districts).where(eq(districts.id, b.district_id));
         if (!d) {
@@ -63,7 +57,7 @@ reportsRouter.post(
             .insert(reports)
             .values({
               trackingId: generateTrackingId(),
-              reporterId: anonymous ? null : (b.reporter_id ?? null),
+              reporterId: anonymous ? null : req.appProfile!.id,
               category: b.category,
               title: b.title,
               description: b.description,
@@ -101,7 +95,7 @@ reportsRouter.post(
         reportId: row.id,
         fromStatus: null,
         toStatus: 'submitted',
-        actorId: null,
+        actorId: req.appProfile!.id,
         note: 'Report submitted',
       });
 
@@ -196,25 +190,18 @@ reportsRouter.get('/:trackingId', async (req: Request, res: Response, next: Next
   }
 });
 
-const corroborateSchema = z.object({ user_id: z.string().uuid() });
-
 // POST /api/reports/:id/corroborate — "I saw this too".
 // >=3 corroborations move submitted -> verifying (review queue).
 // NEVER auto-verifies: final verification is always human (moderator/admin).
 reportsRouter.post(
   '/:id/corroborate',
-  validateBody(corroborateSchema),
+  requireAuth,
+  requireProfile,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = uuidParam(req, res, 'id');
       if (!id) return;
-      const { user_id } = req.body as z.infer<typeof corroborateSchema>;
-
-      const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, user_id));
-      if (!user) {
-        res.status(404).json({ error: 'user not found' });
-        return;
-      }
+      const userId = req.appProfile!.id;
       const [report] = await db.select().from(reports).where(eq(reports.id, id));
       if (!report) {
         res.status(404).json({ error: 'report not found' });
@@ -226,7 +213,7 @@ reportsRouter.post(
       }
 
       try {
-        await db.insert(corroborations).values({ reportId: id, userId: user_id });
+        await db.insert(corroborations).values({ reportId: id, userId });
       } catch (e) {
         if (isPgUniqueViolation(e)) {
           res.status(409).json({ error: 'already corroborated by this user' });
@@ -258,7 +245,6 @@ reportsRouter.post(
 );
 
 const actionClaimSchema = z.object({
-  user_id: z.string().uuid(),
   claim: z.enum(['action_taken', 'no_action']),
   note: z.string().max(1000).optional(),
 });
@@ -267,18 +253,15 @@ const actionClaimSchema = z.object({
 // One claim per user per report (upsert); both counters recomputed every write.
 reportsRouter.post(
   '/:id/action-claim',
+  requireAuth,
+  requireProfile,
   validateBody(actionClaimSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = uuidParam(req, res, 'id');
       if (!id) return;
-      const { user_id, claim, note } = req.body as z.infer<typeof actionClaimSchema>;
-
-      const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, user_id));
-      if (!user) {
-        res.status(404).json({ error: 'user not found' });
-        return;
-      }
+      const { claim, note } = req.body as z.infer<typeof actionClaimSchema>;
+      const userId = req.appProfile!.id;
       const [report] = await db.select().from(reports).where(eq(reports.id, id));
       if (!report) {
         res.status(404).json({ error: 'report not found' });
@@ -291,7 +274,7 @@ reportsRouter.post(
 
       await db
         .insert(actionClaims)
-        .values({ reportId: id, userId: user_id, claim, note: note ?? null })
+        .values({ reportId: id, userId, claim, note: note ?? null })
         .onConflictDoUpdate({
           target: [actionClaims.reportId, actionClaims.userId],
           set: { claim, note: note ?? null, createdAt: new Date() },

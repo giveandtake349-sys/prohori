@@ -2,14 +2,14 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db.js';
+import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody } from '../validate.js';
-import { fraudNumbers, users } from 'db';
+import { fraudNumbers } from 'db';
 
 export const fraudRouter = Router();
 
 const reportFraudSchema = z.object({
   phone_number: z.string().min(6).max(20),
-  reporter_id: z.string().uuid().optional(),
 });
 
 /** Normalizes to digits only so +8801... and 8801... dedupe to one row. */
@@ -20,23 +20,17 @@ function normalizePhone(raw: string): string {
 // POST /api/fraud-numbers — report a scam/fraud number. verified at >= 5 reports.
 fraudRouter.post(
   '/',
+  requireAuth,
+  requireProfile,
   validateBody(reportFraudSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { phone_number, reporter_id } = req.body as z.infer<typeof reportFraudSchema>;
+      const { phone_number } = req.body as z.infer<typeof reportFraudSchema>;
       const normalized = normalizePhone(phone_number);
       if (normalized.length < 6) {
         res.status(400).json({ error: 'invalid phone number' });
         return;
       }
-      if (reporter_id) {
-        const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, reporter_id));
-        if (!u) {
-          res.status(404).json({ error: 'reporter not found' });
-          return;
-        }
-      }
-
       const [row] = await db
         .insert(fraudNumbers)
         .values({ phoneNumber: normalized })

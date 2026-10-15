@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { eq, and, isNotNull, count } from 'drizzle-orm';
 import { db } from '../db.js';
+import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, uuidParam } from '../validate.js';
 import { haversineKm } from '../lib/geo.js';
 import { sosAlerts, users, volunteerTeams, teamMembers, thanas } from 'db';
@@ -9,7 +10,6 @@ import { sosAlerts, users, volunteerTeams, teamMembers, thanas } from 'db';
 export const sosRouter = Router();
 
 const createSosSchema = z.object({
-  user_id: z.string().uuid(),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   address_text: z.string().max(300).optional(),
@@ -28,6 +28,8 @@ const createSosSchema = z.object({
 // below are computed and returned, but no delivery is attempted yet.
 sosRouter.post(
   '/',
+  requireAuth,
+  requireProfile,
   validateBody(createSosSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -35,7 +37,7 @@ sosRouter.post(
       const [reporter] = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.id, b.user_id));
+        .where(eq(users.id, req.appProfile!.id));
       if (!reporter) {
         res.status(404).json({ error: 'user not found' });
         return;
@@ -45,12 +47,12 @@ sosRouter.post(
       await db
         .update(users)
         .set({ lastLat: b.lat, lastLng: b.lng })
-        .where(eq(users.id, b.user_id));
+        .where(eq(users.id, req.appProfile!.id));
 
       const [alert] = await db
         .insert(sosAlerts)
         .values({
-          userId: b.user_id,
+          userId: req.appProfile!.id,
           lat: b.lat,
           lng: b.lng,
           addressText: b.address_text ?? null,
@@ -67,7 +69,7 @@ sosRouter.post(
       const nearbyUserIds = candidates
         .filter(
           (u) =>
-            u.id !== b.user_id &&
+            u.id !== req.appProfile!.id &&
             u.lastLat !== null &&
             u.lastLng !== null &&
             haversineKm(b.lat, b.lng, u.lastLat, u.lastLng) <= 5,
@@ -143,24 +145,25 @@ sosRouter.post(
 
 const updateSosSchema = z.object({
   status: z.enum(['resolved', 'cancelled']),
-  user_id: z.string().uuid(),
 });
 
 // PATCH /api/sos/:id — resolve/cancel. Only the reporter may do this.
 sosRouter.patch(
   '/:id',
+  requireAuth,
+  requireProfile,
   validateBody(updateSosSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = uuidParam(req, res, 'id');
       if (!id) return;
-      const { status, user_id } = req.body as z.infer<typeof updateSosSchema>;
+      const { status } = req.body as z.infer<typeof updateSosSchema>;
       const [alert] = await db.select().from(sosAlerts).where(eq(sosAlerts.id, id));
       if (!alert) {
         res.status(404).json({ error: 'sos not found' });
         return;
       }
-      if (alert.userId !== user_id) {
+      if (alert.userId !== req.appProfile!.id) {
         res.status(403).json({ error: 'only the reporter can update this SOS' });
         return;
       }
@@ -179,7 +182,7 @@ sosRouter.patch(
 // GET /api/sos/active?lat=&lng=&radius_km=5 — active SOS alerts in the area
 // (powers the alert feed). Reporter name is included so rescuers know who
 // needs help; no phone numbers are exposed.
-sosRouter.get('/active', async (req: Request, res: Response, next: NextFunction) => {
+sosRouter.get('/active', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);

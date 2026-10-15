@@ -2,30 +2,15 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { eq, desc } from 'drizzle-orm';
 import { db } from '../db.js';
+import { requireAuth, requireModerator } from '../auth.js';
 import { validateBody, uuidParam } from '../validate.js';
 import { publicReportColumns, ALL_STATUSES } from '../lib/public.js';
-import { reports, statusHistory, users, alerts } from 'db';
+import { reports, statusHistory, alerts } from 'db';
 
 export const adminRouter = Router();
 
-// TODO(auth): replace the body `actor_id` with the Supabase auth session once
-// login lands. The role check below stays — it just reads the session user.
-async function requireModerator(actorId: string | null | undefined, res: Response): Promise<boolean> {
-  if (!actorId) {
-    res.status(403).json({ error: 'actor_id is required for this action' });
-    return false;
-  }
-  const [actor] = await db.select({ role: users.role }).from(users).where(eq(users.id, actorId));
-  if (!actor || (actor.role !== 'moderator' && actor.role !== 'admin')) {
-    res.status(403).json({ error: 'only moderators/admins can perform this action' });
-    return false;
-  }
-  return true;
-}
-
 const statusChangeSchema = z.object({
   to_status: z.enum(ALL_STATUSES),
-  actor_id: z.string().uuid().nullable().optional(),
   note: z.string().max(1000).optional(),
 });
 
@@ -33,7 +18,7 @@ const statusChangeSchema = z.object({
 // Only 'verifying' reports (community corroboration got them here);
 // ordered by corroboration count so the hottest reports are reviewed first.
 // Includes police-action accountability counters.
-adminRouter.get('/queue', async (_req: Request, res: Response, next: NextFunction) => {
+adminRouter.get('/queue', requireAuth, requireModerator, async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await db
       .select(publicReportColumns)
@@ -52,12 +37,14 @@ adminRouter.get('/queue', async (_req: Request, res: Response, next: NextFunctio
 // Community corroboration can only ever reach 'verifying' (see reports router).
 adminRouter.patch(
   '/:id/status',
+  requireAuth,
+  requireModerator,
   validateBody(statusChangeSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const id = uuidParam(req, res, 'id');
       if (!id) return;
-      const { to_status, actor_id, note } = req.body as z.infer<typeof statusChangeSchema>;
+      const { to_status, note } = req.body as z.infer<typeof statusChangeSchema>;
 
       const [report] = await db.select().from(reports).where(eq(reports.id, id));
       if (!report) {
@@ -70,8 +57,10 @@ adminRouter.patch(
       }
 
       if (to_status === 'verified' || to_status === 'rejected') {
-        const ok = await requireModerator(actor_id ?? null, res);
-        if (!ok) return;
+        if (req.appProfile?.role !== 'moderator' && req.appProfile?.role !== 'admin') {
+          res.status(403).json({ error: 'moderator permission required' });
+          return;
+        }
       }
 
       const [updated] = await db
@@ -84,7 +73,7 @@ adminRouter.patch(
         reportId: id,
         fromStatus: report.status,
         toStatus: to_status,
-        actorId: actor_id ?? null,
+        actorId: req.appProfile!.id,
         note: note ?? null,
       });
 
