@@ -145,7 +145,7 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
   }, [open ]);
 
   const n = items.length;
-  const R = Math.min(window.innerWidth * 0.32, 128);
+  const R = Math.min(window.innerWidth * 0.36, 140);
   const cx = window.innerWidth / 2;
   const cy = window.innerHeight * 0.44;
 
@@ -171,8 +171,8 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
                 onClick={closeMenu}
                 className={item.sos ? 'ritem sos' : 'ritem'}
                 style={{
-                  left: x - 37,
-                  top: y - 44,
+                  left: x - 30,
+                  top: y - 31,
                   opacity: shown ? 1 : 0,
                   transform: shown ? 'scale(1)' : 'scale(.4)',
                   transitionDelay: `${i * 35}ms`,
