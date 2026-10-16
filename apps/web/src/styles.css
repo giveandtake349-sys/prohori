@@ -592,7 +592,7 @@ a.card.score-row { border-radius: 12px; padding: 12px 14px; }
 /* v13: crime hotspot map */
 .hotspot-page { padding-bottom: 0; }
 .hotspot-topbar { display: flex; align-items: center; gap: 10px; padding: 12px 14px 8px; }
-.hotspot-mapwrap { position: relative; height: calc(100dvh - 220px); min-height: 420px; margin: 0 14px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
+.hotspot-mapwrap { position: relative; height: calc(100dvh - 180px); min-height: 480px; margin: 0; border-radius: 0; overflow: hidden; border: none; border-top: 1px solid var(--line); }
 .hotspot-map { position: absolute; inset: 0; z-index: 1; background: var(--surface2); }
 .hotspot-map .leaflet-container { font-family: inherit; }
 .hotspot-filters { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 6px; z-index: 500; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
