@@ -54,10 +54,16 @@ app.use((_req: Request, res: Response) => {
 });
 
 // Central error handler: zod/validation errors arrive with .status = 400.
+// 500s NEVER leak raw messages (e.g. "Failed query: insert into...") to clients —
+/// log server-side, friendly Bangla message out.
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   const e = err as { status?: number; message?: string; details?: unknown };
   const status = typeof e.status === 'number' ? e.status : 500;
-  if (status === 500) console.error(err);
+  if (status === 500) {
+    console.error(err);
+    res.status(500).json({ error: 'কিছু একটা সমস্যা হয়েছে। একটু পরে আবার চেষ্টা করুন।' });
+    return;
+  }
   res.status(status).json({ error: e.message ?? 'internal error', details: e.details });
 });
 

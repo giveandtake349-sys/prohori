@@ -36,9 +36,20 @@ authRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { name, phone } = req.body as z.infer<typeof profileSchema>;
+      const me = req.authIdentity!.id;
+      // Friendly duplicate-phone check BEFORE upsert: if this phone belongs to
+      // a DIFFERENT account, tell the user clearly instead of leaking SQL.
+      const [taken] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.phone, phone));
+      if (taken && taken.id !== me) {
+        res.status(409).json({ error: 'এই ফোন নম্বরটি অন্য একটি Prohori account-এ ব্যবহার করা হয়েছে।' });
+        return;
+      }
       const [profile] = await db
         .insert(users)
-        .values({ id: req.authIdentity!.id, name, phone })
+        .values({ id: me, name, phone })
         .onConflictDoUpdate({
           target: users.id,
           set: { name, phone },
@@ -50,7 +61,9 @@ authRouter.post(
         res.status(409).json({ error: 'এই ফোন নম্বরটি অন্য একটি Prohori account-এ ব্যবহার করা হয়েছে।' });
         return;
       }
-      next(error);
+      // Never leak raw SQL to the client — log server-side, friendly message out.
+      console.error('[auth/profile] save failed:', error);
+      res.status(500).json({ error: 'Profile সংরক্ষণ করা যায়নি। একটু পরে আবার চেষ্টা করুন।' });
     }
   },
 );
