@@ -5,6 +5,7 @@ import { db } from '../db.js';
 import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, isPgUniqueViolation, uuidParam } from '../validate.js';
 import { haversineKm } from '../lib/geo.js';
+import { aggregateHotspots } from './hotspots.js';
 import { volunteerTeams, teamMembers, users, thanas, districts } from 'db';
 
 export const teamsRouter = Router();
@@ -452,6 +453,33 @@ async function listMembers(teamId: string) {
     joined_at: r.joinedAt,
   }));
 }
+
+// GET /api/teams/:id/hotspots — hotspots near a team's area (patrol planning, v13).
+teamsRouter.get('/:id/hotspots', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = uuidParam(req, res, 'id');
+    if (!id) return;
+    const q = z
+      .object({ radius_km: z.coerce.number().min(0.5).max(50).default(5) })
+      .safeParse(req.query);
+    if (!q.success) {
+      res.status(400).json({ error: 'invalid query' });
+      return;
+    }
+    const [team] = await db
+      .select({ lat: volunteerTeams.lat, lng: volunteerTeams.lng, name: volunteerTeams.name })
+      .from(volunteerTeams)
+      .where(eq(volunteerTeams.id, id));
+    if (!team || team.lat == null || team.lng == null) {
+      res.status(404).json({ error: 'team not found or has no location' });
+      return;
+    }
+    const cells = await aggregateHotspots({ lat: team.lat, lng: team.lng, radiusKm: q.data.radius_km });
+    res.json({ team: team.name, hotspots: cells });
+  } catch (e) {
+    next(e);
+  }
+});
 
 // GET /api/teams/:id/members — team roster (emergency phones included, members only).
 teamsRouter.get('/:id/members', requireAuth, requireProfile, async (req: Request, res: Response, next: NextFunction) => {

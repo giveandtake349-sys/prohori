@@ -17,6 +17,7 @@ import { geoRouter } from './routes/geo.js';
 import { teamsRouter } from './routes/teams.js';
 import { sosRouter } from './routes/sos.js';
 import { cronRouter } from './routes/cron.js';
+import { hotspotsRouter } from './routes/hotspots.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -44,6 +45,7 @@ app.use('/api/geo', geoRouter);
 app.use('/api/teams', teamsRouter);
 app.use('/api/sos', sosRouter);
 app.use('/api/cron', cronRouter);
+app.use('/api/hotspots', hotspotsRouter);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'not found' });

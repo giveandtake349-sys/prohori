@@ -16,6 +16,7 @@ import DabiPage from './DabiPage';
 import MissingPage from './MissingPage';
 import TrendsPage from './TrendsPage';
 import CasePage from './CasePage';
+import HotspotPage from './HotspotPage';
 import { LangProvider, useLang, type Lang } from './i18n';
 
 function useHashRoute(): string {
@@ -98,6 +99,7 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
     { href: '#/trends', label: t('nav_trends'), icon: (<svg {...iconProps}><path d="M23 6l-9.5 9.5-5-5L23 6z" /><path d="M17 6h6v6" /></svg>) },
     { href: '#/fraud', label: t('nav_fraud'), icon: (<svg {...iconProps}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M9 12l2 2 4-4" /></svg>) },
     { href: '#/track', label: 'Track', icon: (<svg {...iconProps}><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>) },
+    { href: '#/hotspots', label: t('nav_hotspots'), icon: (<svg {...iconProps}><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14M15 6v14" /></svg>) },
     { href: '#/teams', label: 'SOS', sos: true, icon: (<svg {...iconProps}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M12 8v4M12 16h.01" /></svg>) },
   ];
   if (isMod) {
@@ -205,12 +207,16 @@ function Shell() {
   const signedIn = !!auth.session && !!profile;
   const routePathRaw = route.startsWith('#') ? route.slice(1) : route;
   const routePath = signedIn && routePathRaw === '/login' ? '/' : routePathRaw;
+  const routeBase = routePath.split('?')[0];
+  const routeQuery = new URLSearchParams(routePath.includes('?') ? routePath.split('?')[1] : '');
   const isMod = !!profile && (profile.role === 'moderator' || profile.role === 'admin');
   let page;
-  if (routePath === '/login') {
+  if (routeBase === '/login') {
     page = <LoginPage />;
-  } else if (routePath === '/reports/new') {
+  } else if (routeBase === '/reports/new') {
     page = <NewReportPage signedIn={signedIn} />;
+  } else if (routeBase === '/hotspots') {
+    page = <HotspotPage signedIn={signedIn} />;
   } else if (routePath === '/teams') {
     page = <TeamsPage profile={profile} />;
   } else if (routePath.startsWith('/teams/')) {
@@ -238,7 +244,7 @@ function Shell() {
       ? <ModerationPage profile={profile} />
       : <div className="page"><h1>অনুমতি নেই</h1><p className="meta">এই page শুধু moderator/admin account-এর জন্য।</p></div>;
   } else {
-    page = <HomePage signedIn={signedIn} />;
+    page = <HomePage signedIn={signedIn} initialCategory={routeQuery.get('category') ?? ''} />;
   }
 
   return (

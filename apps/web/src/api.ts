@@ -663,3 +663,43 @@ export function fetchAdminUsers(): Promise<{ users: AdminUser[]; count: number }
 export function setUserRole(id: string, role: 'citizen' | 'volunteer' | 'moderator'): Promise<AdminUser> {
   return patch(`/api/admin/users/${encodeURIComponent(id)}/role`, { role });
 }
+
+// ---- v13: crime hotspots ----
+
+export interface HotspotCell {
+  lat: number;
+  lng: number;
+  count: number;
+  risk: 'low' | 'medium' | 'high';
+  riskScore: number;
+  topCategories: string[];
+  topCategoryKeys: string[];
+  peakHours: string;
+}
+
+export interface HotspotQuery {
+  lat: number;
+  lng: number;
+  radius_km?: number;
+  category?: string;
+  time?: 'night' | 'day';
+}
+
+export function fetchHotspots(q: HotspotQuery): Promise<{ hotspots: HotspotCell[] }> {
+  const p = new URLSearchParams();
+  p.set('lat', String(q.lat));
+  p.set('lng', String(q.lng));
+  if (q.radius_km) p.set('radius_km', String(q.radius_km));
+  if (q.category) p.set('category', q.category);
+  if (q.time) p.set('time', q.time);
+  return get(`/api/hotspots?${p.toString()}`);
+}
+
+export function notifyTeamsAboutHotspot(body: {
+  lat: number;
+  lng: number;
+  radius_km?: number;
+  message?: string;
+}): Promise<{ notified: number; teams: string[] }> {
+  return post('/api/hotspots/notify-teams', body);
+}

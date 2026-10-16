@@ -205,9 +205,9 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
   );
 }
 
-export function HomePage({ signedIn }: { signedIn: boolean }) {
+export function HomePage({ signedIn, initialCategory }: { signedIn: boolean; initialCategory?: string }) {
   const [reports, setReports] = useState<FeedReport[]>([]);
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState(initialCategory ?? '');
   const [sort, setSort] = useState<FeedSort>('hot');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

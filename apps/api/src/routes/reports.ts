@@ -16,6 +16,7 @@ import {
   verificationStageOf,
 } from '../lib/public.js';
 import { sendToUserIds } from '../lib/notify.js';
+import { checkHotspotAlert } from './hotspots.js';
 import { reports, reportMedia, corroborations, actionClaims, actionClaimVotes, reportFollowers, statusHistory, districts } from 'db';
 
 export const reportsRouter = Router();
@@ -438,6 +439,8 @@ reportsRouter.post(
           actorId: null,
           note: `প্রাথমিক যাচাই — ${newCount} জন ঘটনাটি নিশ্চিত করেছে (stage 1)`,
         });
+        // v13: a newly verified report may form a new hotspot — alert nearby users.
+        void checkHotspotAlert({ id, lat: report.lat, lng: report.lng, title: report.title });
       }
       if (newStatus !== report.status) {
         await db.insert(statusHistory).values({
