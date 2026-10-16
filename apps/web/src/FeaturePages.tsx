@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   corroborateReport,
   createReport,
@@ -25,6 +25,8 @@ import {
   checkFraudNumber,
   setUserRole,
   submitActionClaim,
+  shareReport,
+  caseShareUrl,
   TEAM_TYPE_META,
   TEAM_TYPES,
   type AdminUser,
@@ -33,6 +35,7 @@ import {
   type Division,
   type EmergencyContacts,
   type FeedReport,
+  type FeedSort,
   type FraudCheck,
   type ModerationStats,
   type NearbySummary,
@@ -45,6 +48,19 @@ import {
 } from './api';
 import { CATEGORY_BN, CATEGORY_KEYS, STATUS_BN, TIER_BN } from './labels';
 import MapPicker from './MapPicker';
+import ShareButtons from './share';
+import { supabase } from './supabaseClient';
+import {
+  ClaimVotes,
+  DeadlineTag,
+  FollowButton,
+  ReportMediaRow,
+  SortToggle,
+  SpotlightRail,
+  StageBadge,
+  StageProgress,
+  stageOf,
+} from './v12';
 
 function timeAgo(iso: string): string {
   const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -72,9 +88,14 @@ function TierBadge({ tier }: { tier: FeedReport['verificationTier'] }) {
 }
 
 function TierProgress({ report }: { report: FeedReport }) {
-  if (report.verificationTier !== 'none') return null;
-  const remaining = Math.max(0, 10 - report.corroborationCount);
-  return remaining > 0 ? <p className="tier-progress">আরও {remaining} জন নিশ্চিত করলে জনতা যাচাইকৃত হবে</p> : null;
+  const stage = stageOf(report);
+  if (stage === 3) {
+    return <StageProgress count={report.corroborationCount} threshold={report.stageThreshold} stage={stage} />;
+  }
+  // Legacy fallback thresholds when the API omits stageThreshold:
+  // stage 0 → 2 (প্রাথমিক), stage 1/2 → 10 (old community target).
+  const threshold = report.stageThreshold ?? (stage === 0 ? 2 : 10);
+  return <StageProgress count={report.corroborationCount} threshold={threshold} stage={stage} />;
 }
 
 function ActionLine({ report }: { report: FeedReport }) {
@@ -108,44 +129,61 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
   };
 
   const canAct = signedIn && report.status !== 'resolved' && report.status !== 'rejected';
-  const remaining = Math.max(0, 10 - report.corroborationCount);
+  const stage = stageOf(report);
   const proofIcon =
-    report.verificationTier === 'official' ? (
+    stage === 3 ? (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
     ) : (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
     );
 
   return (
-    <article className={`rcard tier-${report.verificationTier}`}>
+    <article className={`rcard tier-${report.verificationTier} stage-${stage}`}>
       <div className="rbody">
         <div className="rtop">
           <span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span>
-          <TierBadge tier={report.verificationTier} />
+          <StageBadge stage={stage} />
         </div>
+        <DeadlineTag
+          deadlineAt={report.deadlineAt}
+          overdue={report.overdue}
+          escalationLevel={report.escalationLevel}
+          resolved={report.status === 'resolved'}
+        />
         <h3>{report.title}</h3>
         <p className="rmeta">{report.addressText} • {timeAgo(report.createdAt)}</p>
+        <ReportMediaRow media={report.media} trackingId={report.trackingId} />
         <ActionLine report={report} />
       </div>
       <div className="proof">
-        <span className={`pic${report.verificationTier === 'official' ? ' ok' : ''}`}>{proofIcon}</span>
-        <small>
-          {report.verificationTier === 'official' ? (
-            <><span className="hl-g">প্রহরী যাচাইকৃত ✓</span> • <b>{report.corroborationCount} জন</b> নিশ্চিত করেছিল</>
-          ) : report.verificationTier === 'community' ? (
-            <><b>{report.corroborationCount} জন</b> নিশ্চিত করেছে • <span className="hl-y">জনতা যাচাইকৃত</span></>
+        <span className={`pic${stage === 3 ? ' ok' : ''}`}>{proofIcon}</span>
+        <div className="proof-main">
+          {stage < 2 ? (
+            <>
+              <small><b>{report.corroborationCount} জন</b> নিশ্চিত করেছে</small>
+              <TierProgress report={report} />
+            </>
+          ) : stage === 2 ? (
+            <small><b>{report.corroborationCount} জন</b> নিশ্চিত করেছে • <span className="hl-b">জনতা যাচাইকৃত</span></small>
           ) : (
-            <><b>{report.corroborationCount} জন</b> নিশ্চিত করেছে — আরও <span className="hl-y">{remaining} জন</span> হলে <span className="hl-y">জনতা যাচাইকৃত</span> হবে</>
+            <small><span className="hl-g">প্রহরী যাচাইকৃত ✓</span> • <b>{report.corroborationCount} জন</b> নিশ্চিত করেছিল</small>
           )}
-        </small>
+        </div>
       </div>
       <div className="rfoot">
         <a className="btn blue" href={`#/track/${encodeURIComponent(report.trackingId)}`}>বিস্তারিত</a>
         {canAct && (
-          <button className={`btn ${report.verificationTier === 'none' ? 'yellow' : 'dark'}`} disabled={busy} onClick={() => void act(() => corroborateReport(report.id), 'আপনার corroboration নথিভুক্ত হয়েছে।')}>
+          <button className={`btn ${stage === 0 ? 'yellow' : 'dark'}`} disabled={busy} onClick={() => void act(() => corroborateReport(report.id), 'আপনার corroboration নথিভুক্ত হয়েছে।')}>
             ✓ নিশ্চিত করো
           </button>
         )}
+        <FollowButton
+          kind="report"
+          id={report.id}
+          initialFollowing={report.following}
+          initialCount={report.followerCount}
+          signedIn={signedIn}
+        />
       </div>
       {canAct && (
         <div className="rfoot sub">
@@ -170,19 +208,20 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
 export function HomePage({ signedIn }: { signedIn: boolean }) {
   const [reports, setReports] = useState<FeedReport[]>([]);
   const [category, setCategory] = useState('');
+  const [sort, setSort] = useState<FeedSort>('hot');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const reload = () => {
     setLoading(true);
     setError('');
-    fetchReports(category || undefined)
+    fetchReports(category || undefined, sort)
       .then((data) => setReports(data.reports))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'রিপোর্ট লোড করা যায়নি।'))
       .finally(() => setLoading(false));
   };
 
-  useEffect(reload, [category]);
+  useEffect(reload, [category, sort]);
 
   return (
     <div className="page">
@@ -197,6 +236,8 @@ export function HomePage({ signedIn }: { signedIn: boolean }) {
         <a className="quick-action" href="#/fraud">প্রতারণার নম্বর যাচাই</a>
       </div>
       <h2 className="sec">জনসমক্ষে প্রকাশিত রিপোর্ট</h2>
+      <SpotlightRail />
+      <SortToggle sort={sort} onChange={setSort} />
       <p className="meta">রিপোর্ট জমা দিলেই public-এ দেখা যায়। “প্রকাশিত · যাচাই বাকি” মানে moderator এখনো তথ্য যাচাই করেননি—status দেখে সিদ্ধান্ত নিন।</p>
       <div className="filters">
         <button className={category === '' ? 'fchip on' : 'fchip'} onClick={() => setCategory('')}>সব</button>
@@ -216,7 +257,7 @@ export function HomePage({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-export function TrackPage({ trackingId }: { trackingId: string }) {
+export function TrackPage({ trackingId, signedIn }: { trackingId: string; signedIn: boolean }) {
   const [detail, setDetail] = useState<ReportDetail | null>(null);
   const [error, setError] = useState('');
 
@@ -237,16 +278,33 @@ export function TrackPage({ trackingId }: { trackingId: string }) {
 
   if (error) return <div className="page"><p className="state err">{error}</p><a href="#/">← ফিরে যান</a></div>;
   if (!detail) return <div className="page"><p className="state">রিপোর্ট খোঁজা হচ্ছে…</p></div>;
-  const { report, history, media } = detail;
+  const { report, history, media, claims } = detail;
+  const stage = stageOf(report);
+  const shareUrl = caseShareUrl(trackingId);
   return (
     <div className="page">
       <a className="back-arrow" href="#/track" aria-label="ফিরে যাও">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
         </a>
       <div className="dhero">
-        <TierBadge tier={report.verificationTier} />
+        <StageBadge stage={stage} />
         <h2>{report.title}</h2>
         <p className="rmeta">{report.trackingId} • {report.addressText}</p>
+        <DeadlineTag
+          deadlineAt={report.deadlineAt}
+          overdue={report.overdue}
+          escalationLevel={report.escalationLevel}
+          resolved={report.status === 'resolved'}
+        />
+      </div>
+      <div className="share-prominent">
+        <ShareButtons
+          url={shareUrl}
+          text={report.title}
+          onShared={() => {
+            void shareReport(report.id).catch(() => undefined);
+          }}
+        />
       </div>
       <article className="card">
         <div className="card-top">
@@ -258,17 +316,27 @@ export function TrackPage({ trackingId }: { trackingId: string }) {
         <TierProgress report={report} />
         <p className="corro">{report.corroborationCount} জন নিশ্চিত করেছে • {media.length}টি প্রমাণ সংযুক্ত</p>
         <ActionLine report={report} />
+        <ClaimVotes reportId={report.id} claims={claims} signedIn={signedIn} />
         {media.length > 0 && (
           <>
             <p className="field-label" style={{ marginTop: 12 }}>প্রমাণ ({media.length})</p>
-            <div className="evrow">
+            <div className="evrow scroll-x">
               {media.map((m, i) => (
                 <a key={i} className="ev" href={m.url} target="_blank" rel="noreferrer" title={`SHA-256: ${m.sha256}`}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" /></svg>
                   <img src={m.url} alt="প্রমাণ" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                  <span className="hash">{m.sha256.slice(0, 4)}…✓</span>
+                  <span className="hash">{(m.sha256 ?? '').slice(0, 4)}…✓</span>
                 </a>
               ))}
+            </div>
+            <div className="follow-row">
+              <FollowButton
+                kind="report"
+                id={report.id}
+                initialFollowing={report.following}
+                initialCount={report.followerCount}
+                signedIn={signedIn}
+              />
             </div>
           </>
         )}
@@ -437,6 +505,10 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [trackingId, setTrackingId] = useState('');
+  // v12: multi-image evidence (max 5, images only — no video).
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [photoErr, setPhotoErr] = useState('');
   // Bangla voice input (Web Speech API, bn-BD). Hidden if unsupported.
   const [listening, setListening] = useState(false);
   const recogRef = useRef<SpeechRecognition | null>(null);
@@ -488,6 +560,64 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
     }));
   };
 
+  const onPickPhotos = (event: ChangeEvent<HTMLInputElement>) => {
+    setPhotoErr('');
+    const files = Array.from(event.target.files ?? []);
+    const slots = 5 - photos.length;
+    if (slots <= 0) {
+      setPhotoErr('সর্বোচ্চ ৫টি ছবি দেওয়া যাবে।');
+      event.target.value = '';
+      return;
+    }
+    const accepted: File[] = [];
+    for (const f of files.slice(0, slots)) {
+      if (!f.type.startsWith('image/')) {
+        setPhotoErr('শুধু ছবি ফাইল দিন (ভিডিও নয়)।');
+        continue;
+      }
+      if (f.size > 5 * 1024 * 1024) {
+        setPhotoErr('প্রতিটি ছবি ৫MB-এর কম হতে হবে।');
+        continue;
+      }
+      accepted.push(f);
+    }
+    if (accepted.length > 0) {
+      setPhotos((cur) => [...cur, ...accepted]);
+      setPhotoPreviews((cur) => [...cur, ...accepted.map((f) => URL.createObjectURL(f))]);
+    }
+    event.target.value = '';
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((cur) => cur.filter((_, i) => i !== index));
+    setPhotoPreviews((cur) => {
+      const url = cur[index];
+      if (url) URL.revokeObjectURL(url);
+      return cur.filter((_, i) => i !== index);
+    });
+  };
+
+  const uploadPhotos = async (): Promise<Array<{ url: string; sha256: string }>> => {
+    const uploaded: Array<{ url: string; sha256: string }> = [];
+    for (const file of photos) {
+      const buf = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest('SHA-256', buf);
+      const sha256 = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const path = `reports/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('report-media').upload(path, file, {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (upErr) throw new Error('ছবি আপলোড হয়নি: ' + upErr.message);
+      const url = supabase.storage.from('report-media').getPublicUrl(path).data.publicUrl;
+      uploaded.push({ url, sha256 });
+    }
+    return uploaded;
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
@@ -496,6 +626,7 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
     if (!location) { setError('বিভাগ/জেলা/থানা বেছে নিন অথবা GPS অবস্থান দিন।'); return; }
     setBusy(true);
     try {
+      const media = photos.length > 0 ? await uploadPhotos() : undefined;
       const result = await createReport({
         category,
         title: title.trim(),
@@ -506,11 +637,17 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
         is_anonymous: anonymous,
         district_id: location.districtId,
         accused_name: ['dhorshon', 'khun', 'ghum'].includes(category) && accusedName.trim() ? accusedName.trim() : null,
+        media,
       });
       setTrackingId(result.tracking_id);
       setTitle('');
       setDescription('');
       setAccusedName('');
+      setPhotos([]);
+      setPhotoPreviews((cur) => {
+        cur.forEach((u) => URL.revokeObjectURL(u));
+        return [];
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'রিপোর্ট জমা হয়নি।');
     } finally {
@@ -586,6 +723,28 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setAnonymous((v) => !v); } }}>
             <div><b>পরিচয় গোপন রাখো</b><small>কেউ জানবে না কে রিপোর্ট করেছে</small></div>
             <span className={`switch${anonymous ? ' on' : ''}`} />
+          </div>
+          <div>
+            <p className="field-label">প্রমাণের ছবি (সর্বোচ্চ ৫টি)</p>
+            <label className="upload-box">
+              <input type="file" accept="image/*" multiple hidden onChange={onPickPhotos} disabled={photos.length >= 5} />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
+              </svg>
+              <b>{photos.length > 0 ? `${photos.length}/৫ ছবি যোগ হয়েছে` : 'ছবি যোগ করো'}</b>
+              <small>একসাথে একাধিক ছবি বেছে নিতে পারো</small>
+            </label>
+            {photoPreviews.length > 0 && (
+              <div className="thumb-grid">
+                {photoPreviews.map((src, i) => (
+                  <span className="thumb" key={src}>
+                    <img src={src} alt={`প্রমাণ ${i + 1}`} />
+                    <button type="button" className="thumb-x" onClick={() => removePhoto(i)} aria-label="ছবি সরাও">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {photoErr && <Message error>{photoErr}</Message>}
           </div>
           {error && <Message error>{error}</Message>}
           {trackingId && <div className="success-box"><b>রিপোর্ট public-এ প্রকাশ হয়েছে</b><span>এটি এখনো যাচাই করা হয়নি। আপনার tracking ID: <strong>{trackingId}</strong></span><a href={`#/track/${encodeURIComponent(trackingId)}`}>সব update ও status দেখুন →</a></div>}

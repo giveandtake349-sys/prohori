@@ -16,6 +16,7 @@ import { shareRouter } from './routes/share.js';
 import { geoRouter } from './routes/geo.js';
 import { teamsRouter } from './routes/teams.js';
 import { sosRouter } from './routes/sos.js';
+import { cronRouter } from './routes/cron.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -42,6 +43,7 @@ app.use('/share', shareRouter);
 app.use('/api/geo', geoRouter);
 app.use('/api/teams', teamsRouter);
 app.use('/api/sos', sosRouter);
+app.use('/api/cron', cronRouter);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'not found' });

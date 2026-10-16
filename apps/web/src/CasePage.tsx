@@ -1,26 +1,24 @@
 import { useEffect, useState } from 'react';
-import { fetchReportByTrackingId, caseShareUrl, type ReportDetail } from './api';
+import { fetchReportByTrackingId, caseShareUrl, shareReport, type ReportDetail } from './api';
 import { useLang } from './i18n';
-import { CATEGORY_BN, STATUS_BN, TIER_BN } from './labels';
+import { STATUS_BN } from './labels';
 import ShareButtons from './share';
-
-function TierBadge({ tier }: { tier: string }) {
-  const icon =
-    tier === 'official' ? (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M9 12l2 2 4-4" /></svg>
-    ) : tier === 'community' ? (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
-    ) : (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" /></svg>
-    );
-  return <span className={`chip tier tier-${tier}`}>{icon}{TIER_BN[tier] ?? TIER_BN.none}</span>;
-}
+import {
+  CasePrintView,
+  ClaimVotes,
+  DeadlineTag,
+  FollowButton,
+  StageBadge,
+  StageProgress,
+  stageOf,
+} from './v12';
 
 /** Public shareable case card: status banner + report detail + share buttons. */
-export default function CasePage({ trackingId }: { trackingId: string }) {
+export default function CasePage({ trackingId, signedIn }: { trackingId: string; signedIn: boolean }) {
   const { t, label } = useLang();
   const [detail, setDetail] = useState<ReportDetail | null>(null);
   const [error, setError] = useState('');
+  const [showPrint, setShowPrint] = useState(false);
 
   useEffect(() => {
     fetchReportByTrackingId(trackingId)
@@ -37,10 +35,12 @@ export default function CasePage({ trackingId }: { trackingId: string }) {
     );
   }
   if (!detail) return <div className="page"><p className="state">{t('loading')}</p></div>;
-  const { report: r, history, media } = detail;
+  const { report: r, history, media, claims } = detail;
   const resolved = r.status === 'resolved';
+  const stage = stageOf(r);
   const shareUrl = caseShareUrl(trackingId);
   const shareText = `${r.title} — ${resolved ? t('case_resolved') : t('case_unresolved')}`;
+  const threshold = r.stageThreshold ?? (stage === 0 ? 2 : stage === 3 ? undefined : 10);
 
   return (
     <div className="page">
@@ -49,9 +49,34 @@ export default function CasePage({ trackingId }: { trackingId: string }) {
         {resolved ? t('case_resolved') : t('case_unresolved')}
       </div>
       <div className="dhero">
-        <TierBadge tier={r.verificationTier} />
+        <StageBadge stage={stage} />
         <h2>{r.title}</h2>
         <p className="rmeta">{r.trackingId} • {r.addressText}</p>
+        <DeadlineTag
+          deadlineAt={r.deadlineAt}
+          overdue={r.overdue}
+          escalationLevel={r.escalationLevel}
+          resolved={resolved}
+        />
+      </div>
+      <div className="share-prominent">
+        <ShareButtons
+          url={shareUrl}
+          text={shareText}
+          onShared={() => {
+            void shareReport(r.id).catch(() => undefined);
+          }}
+        />
+        <FollowButton
+          kind="report"
+          id={r.id}
+          initialFollowing={r.following}
+          initialCount={r.followerCount}
+          signedIn={signedIn}
+        />
+        <button type="button" className="pdf-btn" onClick={() => setShowPrint(true)}>
+          📄 PDF
+        </button>
       </div>
       <article className="card">
         <div className="card-top">
@@ -64,30 +89,23 @@ export default function CasePage({ trackingId }: { trackingId: string }) {
             {t('accused_label')}: <b>{r.accusedName}</b>
           </p>
         )}
-        {r.verificationTier === 'none' && r.corroborationCount < 10 && (
-          <p className="tier-progress">{t('tier_progress').replace('{n}', String(10 - r.corroborationCount))}</p>
-        )}
+        <StageProgress count={r.corroborationCount} threshold={threshold} stage={stage} />
         <p className="corro">
           {r.corroborationCount} {t('confirmed_by')} • {media.length} {t('evidence_attached')}
         </p>
+        <ClaimVotes reportId={r.id} claims={claims} signedIn={signedIn} />
         {media.length > 0 && (
-          <div className="evrow">
+          <div className="evrow scroll-x">
             {media.map((m, i) => (
               <a key={i} className="ev" href={m.url} target="_blank" rel="noreferrer" title={`SHA-256: ${m.sha256}`}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" /></svg>
                 <img src={m.url} alt="প্রমাণ" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                <span className="hash">{m.sha256.slice(0, 4)}…✓</span>
+                <span className="hash">{(m.sha256 ?? '').slice(0, 4)}…✓</span>
               </a>
             ))}
           </div>
         )}
       </article>
-
-      <h2 className="sec">{t('share_case')}</h2>
-      <div className="card">
-        <ShareButtons url={shareUrl} text={shareText} />
-        <p className="meta">শেয়ার করলে Facebook/WhatsApp/Telegram-এ কেসের শিরোনাম ও অবস্থা দেখা যাবে।</p>
-      </div>
 
       <h2 className="sec">{t('progress')}</h2>
       <ol className="timeline">
@@ -99,6 +117,9 @@ export default function CasePage({ trackingId }: { trackingId: string }) {
           </li>
         ))}
       </ol>
+      {showPrint && (
+        <CasePrintView report={r} media={media} history={history} onClose={() => setShowPrint(false)} />
+      )}
     </div>
   );
 }

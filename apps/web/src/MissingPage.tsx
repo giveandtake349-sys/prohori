@@ -1,9 +1,19 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { fetchMissingPersons, createMissingPerson, markMissingFound, type MissingPerson } from './api';
+import {
+  fetchMissingPersons,
+  createMissingPerson,
+  markMissingFound,
+  missingShareUrl,
+  shareMissing,
+  type FeedSort,
+  type MissingPerson,
+} from './api';
 import { supabase } from './supabaseClient';
 import { useLang } from './i18n';
+import ShareButtons from './share';
+import { FollowButton, SortToggle } from './v12';
 
-function PersonCard({ p, onChanged }: { p: MissingPerson; onChanged: () => void }) {
+function PersonCard({ p, signedIn, onChanged }: { p: MissingPerson; signedIn: boolean; onChanged: () => void }) {
   const { label } = useLang();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -38,6 +48,23 @@ function PersonCard({ p, onChanged }: { p: MissingPerson; onChanged: () => void 
         <b>যোগাযোগ: {p.contact_phone}</b>
         <span>কল করো →</span>
       </a>
+      <div className="missing-actions">
+        <FollowButton
+          kind="missing"
+          id={p.id}
+          initialFollowing={p.following}
+          initialCount={p.followerCount}
+          signedIn={signedIn}
+        />
+        <ShareButtons
+          url={missingShareUrl(p.id)}
+          text={`${p.name} — নিখোঁজ ব্যক্তির সন্ধান চাই`}
+          size="sm"
+          onShared={() => {
+            void shareMissing(p.id).catch(() => undefined);
+          }}
+        />
+      </div>
       {p.status === 'missing' && (
         <>
           {!confirming ? (
@@ -61,6 +88,7 @@ function PersonCard({ p, onChanged }: { p: MissingPerson; onChanged: () => void 
 export default function MissingPage({ signedIn }: { signedIn: boolean }) {
   const { t } = useLang();
   const [filter, setFilter] = useState<'missing' | 'all'>('missing');
+  const [sort, setSort] = useState<FeedSort>('hot');
   const [persons, setPersons] = useState<MissingPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -81,13 +109,13 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
   const load = () => {
     setLoading(true);
     setError('');
-    fetchMissingPersons(filter)
+    fetchMissingPersons(filter, sort)
       .then((d) => setPersons(d.persons))
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'))
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [filter]);
+  useEffect(load, [filter, sort]);
 
   const onPickPhoto = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -158,6 +186,7 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
           </button>
         )}
       </div>
+      <SortToggle sort={sort} onChange={setSort} />
 
       {showForm && (
         <div className="card">
@@ -210,7 +239,7 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
       {!loading && !error && persons.length === 0 && <p className="state">কোনো তথ্য নেই।</p>}
       <div className="feed">
         {persons.map((p) => (
-          <PersonCard key={p.id} p={p} onChanged={load} />
+          <PersonCard key={p.id} p={p} signedIn={signedIn} onChanged={load} />
         ))}
       </div>
     </div>

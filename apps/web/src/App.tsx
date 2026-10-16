@@ -220,7 +220,7 @@ function Shell() {
   } else if (routePath === '/track') {
     page = <TrackSearchPage />;
   } else if (routePath.startsWith('/track/')) {
-    page = <TrackPage trackingId={decodeURIComponent(routePath.slice('/track/'.length))} />;
+    page = <TrackPage trackingId={decodeURIComponent(routePath.slice('/track/'.length))} signedIn={signedIn} />;
   } else if (routePath === '/scorecard') {
     page = <ScorecardListPage />;
   } else if (routePath.startsWith('/scorecard/')) {
@@ -232,7 +232,7 @@ function Shell() {
   } else if (routePath === '/trends') {
     page = <TrendsPage />;
   } else if (routePath.startsWith('/case/')) {
-    page = <CasePage trackingId={decodeURIComponent(routePath.slice('/case/'.length))} />;
+    page = <CasePage trackingId={decodeURIComponent(routePath.slice('/case/'.length))} signedIn={signedIn} />;
   } else if (routePath === '/moderation') {
     page = isMod
       ? <ModerationPage profile={profile} />

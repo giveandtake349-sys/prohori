@@ -7,6 +7,8 @@ export interface AppProfile {
   role: string;
 }
 
+export type VerificationStage = 0 | 1 | 2 | 3;
+
 export interface FeedReport {
   id: string;
   trackingId: string;
@@ -25,6 +27,19 @@ export interface FeedReport {
   createdAt: string;
   verificationTier: 'none' | 'community' | 'official';
   accusedName: string | null;
+  // v12 staged verification + engagement (all optional: old API may omit them)
+  verificationStage?: VerificationStage;
+  stageThreshold?: number;
+  followerCount?: number;
+  shareCount?: number;
+  following?: boolean;
+  deadlineAt?: string | null;
+  overdue?: boolean;
+  escalationLevel?: 'thana' | 'sp' | 'dig' | string | null;
+  escalatedAt?: string | null;
+  disputedClaim?: boolean;
+  lastActivityAt?: string | null;
+  media?: MediaItem[];
 }
 
 export interface MediaItem {
@@ -44,6 +59,18 @@ export interface ReportDetail {
   report: FeedReport;
   media: MediaItem[];
   history: HistoryItem[];
+  claims?: ClaimItem[];
+}
+
+export interface ClaimItem {
+  id: string;
+  claim: string;
+  note: string | null;
+  userName: string | null;
+  confirms: number;
+  disputes: number;
+  disputedClaim: boolean;
+  myVote?: 'confirm' | 'dispute' | null;
 }
 
 export const TEAM_TYPES = [
@@ -193,9 +220,12 @@ export function saveProfile(name: string, phone: string) {
   return post<{ profile: AppProfile }>('/api/auth/profile', { name, phone });
 }
 
-export function fetchReports(category?: string): Promise<{ reports: FeedReport[]; count: number }> {
+export type FeedSort = 'hot' | 'new';
+
+export function fetchReports(category?: string, sort?: FeedSort): Promise<{ reports: FeedReport[]; count: number }> {
   const query = new URLSearchParams({ limit: '50' });
   if (category) query.set('category', category);
+  if (sort) query.set('sort', sort);
   return get(`/api/reports?${query.toString()}`);
 }
 
@@ -214,6 +244,7 @@ export interface NewReport {
   is_anonymous: boolean;
   district_id?: string | null;
   accused_name?: string | null;
+  media?: Array<{ url: string; sha256: string }>;
 }
 
 export function createReport(report: NewReport) {
@@ -221,7 +252,32 @@ export function createReport(report: NewReport) {
 }
 
 export function corroborateReport(reportId: string) {
-  return post<{ corroboration_count: number; status: string; community_verified: boolean; verification_tier?: string }>(`/api/reports/${encodeURIComponent(reportId)}/corroborate`, {});
+  return post<{ corroboration_count: number; status: string; community_verified: boolean; verification_tier?: string; verification_stage?: number; stage_threshold?: number }>(`/api/reports/${encodeURIComponent(reportId)}/corroborate`, {});
+}
+
+// ---- v12: follow / share / claim votes / spotlight ----
+
+export function followReport(reportId: string) {
+  return post<{ following: boolean; follower_count: number }>(`/api/reports/${encodeURIComponent(reportId)}/follow`, {});
+}
+
+export function unfollowReport(reportId: string) {
+  return del<{ following: boolean; follower_count: number }>(`/api/reports/${encodeURIComponent(reportId)}/follow`);
+}
+
+export function shareReport(reportId: string) {
+  return post<{ share_count: number }>(`/api/reports/${encodeURIComponent(reportId)}/share`, {});
+}
+
+export function voteClaim(reportId: string, claimId: string, vote: 'confirm' | 'dispute') {
+  return post<{ confirms: number; disputes: number; disputed_claim: boolean }>(
+    `/api/reports/${encodeURIComponent(reportId)}/claims/${encodeURIComponent(claimId)}/vote`,
+    { vote },
+  );
+}
+
+export function getSpotlight(): Promise<{ reports: FeedReport[] }> {
+  return get('/api/reports/spotlight');
 }
 
 export function submitActionClaim(reportId: string, claim: 'action_taken' | 'no_action', note?: string) {
@@ -383,8 +439,11 @@ export interface Petition {
   report: { tracking_id: string; title: string } | null;
 }
 
-export function fetchPetitions(): Promise<{ petitions: Petition[]; count: number }> {
-  return get('/api/petitions');
+export function fetchPetitions(sort?: FeedSort): Promise<{ petitions: Petition[]; count: number }> {
+  const query = new URLSearchParams();
+  if (sort) query.set('sort', sort);
+  const qs = query.toString();
+  return get(`/api/petitions${qs ? `?${qs}` : ''}`);
 }
 
 export function createPetition(input: {
@@ -412,6 +471,10 @@ export interface PetitionShare {
 
 export function fetchPetitionShare(id: string): Promise<PetitionShare> {
   return get(`/api/petitions/${encodeURIComponent(id)}/share`);
+}
+
+export function sharePetition(id: string): Promise<{ share_count: number }> {
+  return post(`/api/petitions/${encodeURIComponent(id)}/share`, {});
 }
 
 // ---- Nearby summary (public, verified-only 30d/1km) ----
@@ -445,14 +508,63 @@ export interface MissingPerson {
   status: string;
   found_at: string | null;
   created_at: string;
+  followerCount?: number;
+  shareCount?: number;
+  following?: boolean;
 }
 
-export function fetchMissingPersons(status = 'missing'): Promise<{
+export function fetchMissingPersons(status = 'missing', sort?: FeedSort): Promise<{
   persons: MissingPerson[];
   count: number;
   counts: { missing: number; found: number };
 }> {
-  return get(`/api/missing?status=${encodeURIComponent(status)}`);
+  const query = new URLSearchParams({ status });
+  if (sort) query.set('sort', sort);
+  // The API may return Drizzle camelCase keys or snake_case; normalize defensively.
+  return get<{ persons: Array<Record<string, unknown>>; count: number; counts: { missing: number; found: number } }>(
+    `/api/missing?${query.toString()}`,
+  ).then((d) => ({ count: d.count, counts: d.counts, persons: (d.persons ?? []).map(normalizeMissingPerson) }));
+}
+
+function normalizeMissingPerson(r: Record<string, unknown>): MissingPerson {
+  const pick = (...keys: string[]): unknown => {
+    for (const k of keys) if (r[k] !== undefined && r[k] !== null) return r[k];
+    return null;
+  };
+  return {
+    id: String(r.id ?? ''),
+    name: String(r.name ?? ''),
+    age: (pick('age') as number | null) ?? null,
+    gender: (pick('gender') as string | null) ?? null,
+    photo_url: (pick('photo_url', 'photoUrl') as string | null) ?? null,
+    last_seen_lat: (pick('last_seen_lat', 'lastSeenLat') as number | null) ?? null,
+    last_seen_lng: (pick('last_seen_lng', 'lastSeenLng') as number | null) ?? null,
+    last_seen_text: (pick('last_seen_text', 'lastSeenText') as string | null) ?? null,
+    last_seen_date: (pick('last_seen_date', 'lastSeenDate') as string | null) ?? null,
+    contact_phone: String(pick('contact_phone', 'contactPhone') ?? ''),
+    status: String(r.status ?? 'missing'),
+    found_at: (pick('found_at', 'foundAt') as string | null) ?? null,
+    created_at: String(pick('created_at', 'createdAt') ?? ''),
+    followerCount: Number(pick('followerCount', 'follower_count') ?? 0),
+    shareCount: Number(pick('shareCount', 'share_count') ?? 0),
+    following: Boolean(pick('following') ?? false),
+  };
+}
+
+export function followMissing(id: string) {
+  return post<{ following: boolean; follower_count: number }>(`/api/missing/${encodeURIComponent(id)}/follow`, {});
+}
+
+export function unfollowMissing(id: string) {
+  return del<{ following: boolean; follower_count: number }>(`/api/missing/${encodeURIComponent(id)}/follow`);
+}
+
+export function shareMissing(id: string) {
+  return post<{ share_count: number }>(`/api/missing/${encodeURIComponent(id)}/share`, {});
+}
+
+export function missingShareUrl(id: string): string {
+  return `${API_BASE}/share/missing/${encodeURIComponent(id)}`;
 }
 
 export function createMissingPerson(input: {

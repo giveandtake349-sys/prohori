@@ -5,7 +5,7 @@ import { db } from '../db.js';
 import { requireAuth, requireModerator } from '../auth.js';
 import { validateBody, uuidParam } from '../validate.js';
 import { publicReportColumns, ALL_STATUSES, verificationTierOf } from '../lib/public.js';
-import { reports, statusHistory, alerts, moderationActions, users } from 'db';
+import { reports, statusHistory, alerts, moderationActions, users, reportFollowers } from 'db';
 import { sendToUserIds } from '../lib/notify.js';
 
 export const adminRouter = Router();
@@ -88,7 +88,7 @@ adminRouter.patch(
 
       const [updated] = await db
         .update(reports)
-        .set({ status: to_status })
+        .set({ status: to_status, lastActivityAt: new Date() })
         .where(eq(reports.id, id))
         .returning();
 
@@ -137,6 +137,32 @@ adminRouter.patch(
         void sendToUserIds([report.reporterId], {
           title,
           body,
+          data: { kind: 'moderation', report_id: id, status: to_status },
+        });
+      }
+
+      // Notify case followers (except the acting moderator) of the status change.
+      // Fire-and-forget: push failure must never break moderation.
+      const followerRows = await db
+        .select({ userId: reportFollowers.userId })
+        .from(reportFollowers)
+        .where(eq(reportFollowers.reportId, id));
+      const followerIds = followerRows
+        .map((r) => r.userId)
+        .filter((uid) => uid !== req.appProfile!.id && uid !== report.reporterId);
+      if (followerIds.length > 0) {
+        const statusBn: Record<string, string> = {
+          submitted: 'জমা হয়েছে',
+          verifying: 'যাচাই চলছে',
+          verified: 'প্রহরী যাচাইকৃত ✓',
+          forwarded: 'থানায় পাঠানো হয়েছে',
+          investigating: 'তদন্ত চলছে',
+          resolved: 'সমাধান হয়েছে ✓',
+          rejected: 'বাতিল হয়েছে',
+        };
+        void sendToUserIds(followerIds, {
+          title: 'কেস আপডেট',
+          body: `${report.trackingId}: স্ট্যাটাস এখন — ${statusBn[to_status] ?? to_status}`,
           data: { kind: 'moderation', report_id: id, status: to_status },
         });
       }

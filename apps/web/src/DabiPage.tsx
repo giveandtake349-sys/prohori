@@ -4,11 +4,14 @@ import {
   createPetition,
   signPetition,
   fetchPetitionShare,
+  sharePetition,
+  type FeedSort,
   type Petition,
   type PetitionShare,
 } from './api';
 import { useLang } from './i18n';
 import ShareButtons from './share';
+import { SortToggle } from './v12';
 
 function PetitionShareBox({ petitionId }: { petitionId: string }) {
   const [open, setOpen] = useState(false);
@@ -37,7 +40,13 @@ function PetitionShareBox({ petitionId }: { petitionId: string }) {
           {share && (
             <>
               <p className="share-text">{share.share_text}</p>
-              <ShareButtons url={share.share_url || window.location.href} text={share.share_text} />
+              <ShareButtons
+                url={share.share_url || window.location.href}
+                text={share.share_text}
+                onShared={() => {
+                  void sharePetition(petitionId).catch(() => undefined);
+                }}
+              />
             </>
           )}
         </div>
@@ -75,7 +84,7 @@ function PetitionCard({ p, signedIn, onSigned }: { p: Petition; signedIn: boolea
         <i style={{ width: `${p.progress_pct}%` }} />
       </div>
       <p className="meta">{p.signature_count} / {p.threshold} স্বাক্ষর ({p.progress_pct}%)</p>
-      {p.progress_pct >= 100 && <PetitionShareBox petitionId={p.id} />}
+      <PetitionShareBox petitionId={p.id} />
       {p.status === 'active' && signedIn && (
         <button className="fchip on" onClick={sign} disabled={busy}>
           {busy ? t('dabi_signing') : t('dabi_sign')}
@@ -89,6 +98,7 @@ function PetitionCard({ p, signedIn, onSigned }: { p: Petition; signedIn: boolea
 export default function DabiPage({ signedIn }: { signedIn: boolean }) {
   const { t } = useLang();
   const [list, setList] = useState<Petition[]>([]);
+  const [sort, setSort] = useState<FeedSort>('hot');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [title, setTitle] = useState('');
@@ -98,12 +108,12 @@ export default function DabiPage({ signedIn }: { signedIn: boolean }) {
 
   const reload = () => {
     setLoading(true);
-    fetchPetitions()
+    fetchPetitions(sort)
       .then((d) => setList(d.petitions))
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'load failed'))
       .finally(() => setLoading(false));
   };
-  useEffect(reload, []);
+  useEffect(reload, [sort]);
 
   const create = () => {
     if (title.trim().length < 5 || desc.trim().length < 10) {
@@ -140,6 +150,7 @@ export default function DabiPage({ signedIn }: { signedIn: boolean }) {
         </div>
       )}
       <h2 className="sec">{t('dabi_active')}</h2>
+      <SortToggle sort={sort} onChange={setSort} />
       {loading && <p className="state">{t('loading')}</p>}
       {error && <p className="state err">{error}</p>}
       <div className="feed">

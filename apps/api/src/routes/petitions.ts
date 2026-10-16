@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { eq, desc, count } from 'drizzle-orm';
+import { eq, desc, count, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, uuidParam, isPgUniqueViolation } from '../validate.js';
@@ -142,6 +142,7 @@ async function withCounts(rows: Array<typeof petitions.$inferSelect>) {
         level: p.level,
         status: p.status,
         created_at: p.createdAt,
+        share_count: p.shareCount,
         signature_count: n,
         progress_pct: Math.min(100, Math.round((n / Math.max(1, p.threshold)) * 100)),
         report: reportInfo,
@@ -151,10 +152,17 @@ async function withCounts(rows: Array<typeof petitions.$inferSelect>) {
 }
 
 // GET /api/petitions — list with signature counts + progress (public).
-petitionsRouter.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+// ?sort=hot|new — "hot" (default) ranks by engagement (signatures×3 +
+// shares×2); "new" is reverse-chronological.
+petitionsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const sort = req.query.sort === 'new' ? 'new' : 'hot';
     const rows = await db.select().from(petitions).orderBy(desc(petitions.createdAt)).limit(100);
-    res.json({ petitions: await withCounts(rows), count: rows.length });
+    const listed = await withCounts(rows);
+    if (sort === 'hot') {
+      listed.sort((a, b) => b.signature_count * 3 + b.share_count * 2 - (a.signature_count * 3 + a.share_count * 2));
+    }
+    res.json({ petitions: listed, count: listed.length, sort });
   } catch (e) {
     next(e);
   }
@@ -231,3 +239,24 @@ petitionsRouter.get('/:id/share', async (req: Request, res: Response, next: Next
 });
 
 export { LEVELS };
+
+// POST /api/petitions/:id/share — record a share (public; powers the hot feed).
+petitionsRouter.post('/:id/share', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = uuidParam(req, res, 'id');
+    if (!id) return;
+    const [p] = await db.select({ id: petitions.id }).from(petitions).where(eq(petitions.id, id));
+    if (!p) {
+      res.status(404).json({ error: 'petition not found' });
+      return;
+    }
+    const [updated] = await db
+      .update(petitions)
+      .set({ shareCount: sql`${petitions.shareCount} + 1`, lastActivityAt: new Date() })
+      .where(eq(petitions.id, id))
+      .returning({ shareCount: petitions.shareCount });
+    res.json({ share_count: updated?.shareCount ?? 0 });
+  } catch (e) {
+    next(e);
+  }
+});

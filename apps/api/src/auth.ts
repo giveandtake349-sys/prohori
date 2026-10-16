@@ -137,3 +137,54 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
     next(error);
   }
 }
+
+/**
+ * Optional auth: if a Bearer token is present it is verified with Supabase
+ * Auth (same as requireAuth) and the matching profile loaded onto
+ * req.appProfile; if absent, or if verification fails, the request proceeds
+ * anonymously (req.appProfile stays unset). Used for public routes that
+ * add a small personalization flag (e.g. `following`) for signed-in users.
+ */
+export async function optionalAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const match = /^Bearer\s+(.+)$/i.exec(req.header('authorization') ?? '');
+  if (!match) {
+    next();
+    return;
+  }
+  const baseUrl = process.env.SUPABASE_URL?.replace(/\/$/, '');
+  const apiKey = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY;
+  if (!baseUrl || !apiKey) {
+    next();
+    return;
+  }
+  try {
+    const userEndpoint = `${baseUrl}/auth/v1/user`;
+    const keyHeader = apiKey;
+    const authHeaderValue = `Bearer ${match[1]}`;
+    const response = await fetch(userEndpoint, {
+      headers: {
+        apikey: keyHeader,
+        authorization: authHeaderValue,
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) {
+      next();
+      return;
+    }
+    const body = (await response.json()) as { id?: unknown };
+    if (typeof body.id !== 'string') {
+      next();
+      return;
+    }
+    const [profile] = await db
+      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role })
+      .from(users)
+      .where(eq(users.id, body.id));
+    if (profile) req.appProfile = profile;
+    next();
+  } catch {
+    // Best-effort: an unverifiable token just means anonymous mode.
+    next();
+  }
+}

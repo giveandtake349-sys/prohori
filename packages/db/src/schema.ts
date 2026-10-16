@@ -96,6 +96,18 @@ export const reports = pgTable(
     // Public accountability: does the community say authorities acted?
     actionTakenCount: integer('action_taken_count').notNull().default(0),
     noActionCount: integer('no_action_count').notNull().default(0),
+    // v12 report-system upgrade:
+    followerCount: integer('follower_count').notNull().default(0),
+    shareCount: integer('share_count').notNull().default(0),
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
+    // 7-day police-action deadline (set when জনতা যাচাইকৃত is reached).
+    deadlineAt: timestamp('deadline_at', { withTimezone: true }),
+    overdue: boolean('overdue').notNull().default(false),
+    // Escalation ladder for overdue cases: thana | sp | dig.
+    escalationLevel: text('escalation_level').notNull().default('thana'),
+    escalatedAt: timestamp('escalated_at', { withTimezone: true }),
+    // Community disputes the police-action claims (votes: disputes >= 5 and > confirms).
+    disputedClaim: boolean('disputed_claim').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   // Geo index for the nearby crime-history lookup (GET /api/reports/nearby-summary).
@@ -237,6 +249,62 @@ export const actionClaims = pgTable(
 );
 
 /**
+ * v12: votes on police-action claims ("confirm"/"dispute").
+ * One vote per user per claim; if disputes >= 5 and > confirms, the report's
+ * disputed_claim flag is set (penalizes the thana scorecard).
+ */
+export const actionClaimVotes = pgTable(
+  'action_claim_votes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    claimId: uuid('claim_id')
+      .notNull()
+      .references(() => actionClaims.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    vote: text('vote').notNull(), // 'confirm' | 'dispute'
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('action_claim_votes_claim_user_uniq').on(t.claimId, t.userId)],
+);
+
+/**
+ * v12: "Follow case" subscriptions — followers get FCM on stage changes,
+ * overdue/escalation and moderator status updates.
+ */
+export const reportFollowers = pgTable(
+  'report_followers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reportId: uuid('report_id')
+      .notNull()
+      .references(() => reports.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('report_followers_report_user_uniq').on(t.reportId, t.userId)],
+);
+
+/** v12: follow subscriptions for missing-person entries. */
+export const missingFollowers = pgTable(
+  'missing_followers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    missingId: uuid('missing_id')
+      .notNull()
+      .references(() => missingPersons.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('missing_followers_missing_user_uniq').on(t.missingId, t.userId)],
+);
+
+/**
  * Push-notification device tokens (FCM). One row per device; token is the
  * unique key so re-registering the same device just re-links the user.
  */
@@ -267,6 +335,9 @@ export const petitions = pgTable('petitions', {
   threshold: integer('threshold').notNull().default(100),
   level: text('level').notNull().default('thana'),
   status: text('status').notNull().default('active'),
+  // v12: share engagement (same smart-feed signals as reports).
+  shareCount: integer('share_count').notNull().default(0),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -322,6 +393,10 @@ export const missingPersons = pgTable('missing_persons', {
   status: text('status').notNull().default('missing'),
   reporterId: uuid('reporter_id').references(() => users.id),
   foundAt: timestamp('found_at', { withTimezone: true }),
+  // v12: follow/share engagement (same smart-feed signals as reports).
+  followerCount: integer('follower_count').notNull().default(0),
+  shareCount: integer('share_count').notNull().default(0),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -378,3 +453,6 @@ export type DeviceToken = typeof deviceTokens.$inferSelect;
 export type Petition = typeof petitions.$inferSelect;
 export type PetitionSignature = typeof petitionSignatures.$inferSelect;
 export type PetitionEvent = typeof petitionEvents.$inferSelect;
+export type ReportFollower = typeof reportFollowers.$inferSelect;
+export type MissingFollower = typeof missingFollowers.$inferSelect;
+export type ActionClaimVote = typeof actionClaimVotes.$inferSelect;

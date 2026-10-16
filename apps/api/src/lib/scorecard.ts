@@ -15,6 +15,14 @@ import { haversineKm } from './geo.js';
 //                         (avg hours from first 'verified' to first 'resolved'
 //                          in status_history; faster resolution → higher score)
 //
+// v12: two accountability adjustments —
+//   overdueCount  : cases whose 7-day police-action deadline passed.
+//   disputedCount : cases where the community disputes the police-action
+//                   claims (disputed_claim flag). Each disputed case in the
+//                   thana set subtracts a flat 15 points from the final
+//                   score (clamped at 0) — disputed claims mean the public
+//                   doesn't trust the reported numbers.
+//
 // Each component is null when its data is missing. The final score is the
 // weighted average over AVAILABLE components only (weights renormalized).
 // If NO component has data, score is null → the UI shows "তথ্য নেই".
@@ -27,6 +35,8 @@ import { haversineKm } from './geo.js';
 
 export const ELIGIBLE_STATUSES = ['verified', 'forwarded', 'investigating', 'resolved'] as const;
 const NEAREST_THANA_KM = 25;
+/** Flat score penalty when a thana has disputed police-action claims (see header). */
+export const DISPUTED_CLAIM_PENALTY = 15;
 
 export interface Scorecard {
   thana_id: string;
@@ -37,6 +47,8 @@ export interface Scorecard {
   action_taken_sum: number;
   no_action_sum: number;
   resolved_count: number;
+  overdue_count: number;
+  disputed_count: number;
   resolution_rate_pct: number | null;
   avg_verify_to_resolve_hours: number | null;
   score: number | null;
@@ -47,6 +59,8 @@ interface ReportLite {
   status: string;
   actionTakenCount: number;
   noActionCount: number;
+  overdue: boolean;
+  disputedClaim: boolean;
   lat: number;
   lng: number;
 }
@@ -57,30 +71,20 @@ function round1(n: number): number {
 
 /** Attribute reports to a thana: direct thana_id, plus legacy NULL rows via nearest match. */
 async function reportsForThana(thanaId: string, lat: number, lng: number): Promise<ReportLite[]> {
-  const direct = await db
-    .select({
-      id: reports.id,
-      status: reports.status,
-      actionTakenCount: reports.actionTakenCount,
-      noActionCount: reports.noActionCount,
-      lat: reports.lat,
-      lng: reports.lng,
-    })
-    .from(reports)
-    .where(eq(reports.thanaId, thanaId));
+  const cols = {
+    id: reports.id,
+    status: reports.status,
+    actionTakenCount: reports.actionTakenCount,
+    noActionCount: reports.noActionCount,
+    overdue: reports.overdue,
+    disputedClaim: reports.disputedClaim,
+    lat: reports.lat,
+    lng: reports.lng,
+  };
+  const direct = await db.select(cols).from(reports).where(eq(reports.thanaId, thanaId));
 
   // Legacy rows (NULL thana_id): attribute on read if this thana is nearest ≤25 km.
-  const legacy = await db
-    .select({
-      id: reports.id,
-      status: reports.status,
-      actionTakenCount: reports.actionTakenCount,
-      noActionCount: reports.noActionCount,
-      lat: reports.lat,
-      lng: reports.lng,
-    })
-    .from(reports)
-    .where(isNull(reports.thanaId));
+  const legacy = await db.select(cols).from(reports).where(isNull(reports.thanaId));
 
   if (legacy.length === 0) return direct;
 
@@ -136,6 +140,7 @@ export function computeScore(parts: {
   actionTaken: number;
   noAction: number;
   avgHours: number | null;
+  disputedCount: number;
 }): { resolution_rate_pct: number | null; avg_verify_to_resolve_hours: number | null; score: number | null } {
   const resolution = parts.eligible > 0 ? (parts.resolved / parts.eligible) * 100 : null;
   const actionDen = parts.actionTaken + parts.noAction;
@@ -155,7 +160,11 @@ export function computeScore(parts: {
       weighted += w * v;
     }
   }
-  const score = wSum > 0 ? round1(weighted / wSum) : null;
+  let score = wSum > 0 ? round1(weighted / wSum) : null;
+  // Disputed police-action claims erode trust in the numbers: flat penalty.
+  if (score !== null && parts.disputedCount > 0) {
+    score = round1(Math.max(0, score - DISPUTED_CLAIM_PENALTY));
+  }
   return {
     resolution_rate_pct: resolution !== null ? round1(resolution) : null,
     avg_verify_to_resolve_hours: parts.avgHours !== null ? round1(parts.avgHours) : null,
@@ -175,6 +184,8 @@ export async function scorecardForThana(
   const resolved = eligible.filter((r) => r.status === 'resolved');
   const actionTaken = eligible.reduce((a, r) => a + r.actionTakenCount, 0);
   const noAction = eligible.reduce((a, r) => a + r.noActionCount, 0);
+  const overdueCount = eligible.filter((r) => r.overdue).length;
+  const disputedCount = eligible.filter((r) => r.disputedClaim).length;
   const avgHours = await avgVerifyToResolveHours(resolved.map((r) => r.id));
   const { resolution_rate_pct, avg_verify_to_resolve_hours, score } = computeScore({
     eligible: eligible.length,
@@ -182,6 +193,7 @@ export async function scorecardForThana(
     actionTaken,
     noAction,
     avgHours,
+    disputedCount,
   });
   return {
     thana_id: thanaId,
@@ -192,6 +204,8 @@ export async function scorecardForThana(
     action_taken_sum: actionTaken,
     no_action_sum: noAction,
     resolved_count: resolved.length,
+    overdue_count: overdueCount,
+    disputed_count: disputedCount,
     resolution_rate_pct,
     avg_verify_to_resolve_hours,
     score,
