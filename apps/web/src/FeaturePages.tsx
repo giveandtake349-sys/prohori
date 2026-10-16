@@ -953,6 +953,56 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
 
   const step1Valid = districtId !== '' && thanaId !== '' && elaka.trim().length >= 2 && pinLat !== null && pinLng !== null;
 
+  // v15.1: auto-fill division/district/thana from map pin (nearest thana).
+  const [autoFilling, setAutoFilling] = useState(false);
+  const [allThanas, setAllThanas] = useState<Thana[]>([]);
+  const [pendingDistrictId, setPendingDistrictId] = useState<string | null>(null);
+  const [pendingThanaId, setPendingThanaId] = useState<string | null>(null);
+  useEffect(() => { void fetchThanas().then((d) => setAllThanas(d.thanas)).catch(() => undefined); }, []);
+
+  const autoFillFromPin = (lat: number, lng: number) => {
+    if (allThanas.length === 0) return;
+    let best: Thana | null = null;
+    let bestD = Infinity;
+    for (const t of allThanas) {
+      const R = 6371;
+      const dLa = ((t.lat - lat) * Math.PI) / 180;
+      const dLo = ((t.lng - lng) * Math.PI) / 180;
+      const a = Math.sin(dLa / 2) * Math.sin(dLa / 2) +
+        Math.cos((lat * Math.PI) / 180) * Math.cos((t.lat * Math.PI) / 180) *
+        Math.sin(dLo / 2) * Math.sin(dLo / 2);
+      const d = 2 * R * Math.asin(Math.sqrt(a));
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    if (!best || !best.district_id) return;
+    const thana = best;
+    setAutoFilling(true);
+    void fetchDistricts().then((d) => {
+      const dist = d.districts.find((x) => x.id === thana.district_id);
+      if (!dist) { setAutoFilling(false); return; }
+      setPendingDistrictId(dist.id);
+      setPendingThanaId(thana.id);
+      setDivisionId(dist.division_id);
+    }).catch(() => setAutoFilling(false));
+  };
+
+  useEffect(() => {
+    if (pendingDistrictId && districts.some((d) => d.id === pendingDistrictId)) {
+      setDistrictId(pendingDistrictId);
+      setPendingDistrictId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [districts, pendingDistrictId]);
+
+  useEffect(() => {
+    if (pendingThanaId && thanas.some((t) => t.id === pendingThanaId)) {
+      setThanaId(pendingThanaId);
+      setPendingThanaId(null);
+      setAutoFilling(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thanas, pendingThanaId]);
+
   const onCreate = async () => {
     setCreateError('');
     if (!profile) { setCreateError('Team তৈরি করতে login করুন।'); return; }
@@ -1099,9 +1149,12 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
                   setCreateError('');
                   navigator.geolocation.getCurrentPosition(
                     (pos) => {
-                      setPinLat(Number(pos.coords.latitude.toFixed(6)));
-                      setPinLng(Number(pos.coords.longitude.toFixed(6)));
+                      const la = Number(pos.coords.latitude.toFixed(6));
+                      const ln = Number(pos.coords.longitude.toFixed(6));
+                      setPinLat(la);
+                      setPinLng(ln);
                       setShowMap(true);
+                      autoFillFromPin(la, ln);
                     },
                     () => setCreateError('লোকেশন অনুমতি দরকার। Browser location permission চালু করো।'),
                     { enableHighAccuracy: true, timeout: 12000 },
@@ -1112,8 +1165,8 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
               </button>
               {showMap && (
                 <div className="map-wrap">
-                  <MapPicker lat={pinLat} lng={pinLng} onPick={(la, ln) => { setPinLat(la); setPinLng(ln); }} />
-                  {pinLat !== null && <p className="meta ok">✓ Pin বসেছে ({pinLat.toFixed(4)}, {pinLng!.toFixed(4)})</p>}
+                  <MapPicker lat={pinLat} lng={pinLng} onPick={(la, ln) => { setPinLat(la); setPinLng(ln); autoFillFromPin(la, ln); }} />
+                  {pinLat !== null && <p className="meta ok">✓ Pin বসেছে ({pinLat.toFixed(4)}, {pinLng!.toFixed(4)}){autoFilling ? ' — এলাকা খুঁজছে…' : ''}</p>}
                 </div>
               )}
               <button className="primary-btn" disabled={!step1Valid} onClick={() => setStep(2)}>পরবর্তী →</button>
