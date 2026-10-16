@@ -249,8 +249,8 @@ function Shell() {
           প্রহরী
         </a>
         <div className="user-menu">
-          <a className="sos-pill" href="#/teams">SOS</a>
           <RadialMenu isMod={isMod} />
+          <a className="sos-pill" href="#/teams">SOS</a>
           <ThemeToggle />
           <LangToggle />
           {profile ? (

@@ -23,7 +23,6 @@ import {
   removeTeamMember,
   reportFraudNumber,
   checkFraudNumber,
-  sendSos,
   setUserRole,
   submitActionClaim,
   TEAM_TYPE_META,
@@ -241,7 +240,9 @@ export function TrackPage({ trackingId }: { trackingId: string }) {
   const { report, history, media } = detail;
   return (
     <div className="page">
-      <a className="back" href="#/">← সব রিপোর্ট</a>
+      <a className="back-arrow" href="#/track" aria-label="ফিরে যাও">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+        </a>
       <div className="dhero">
         <TierBadge tier={report.verificationTier} />
         <h2>{report.title}</h2>
@@ -299,7 +300,11 @@ export function TrackSearchPage() {
   return (
     <div className="page">
       <section className="card">
-        <h1>রিপোর্ট ট্র্যাক করুন</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}><a className="back-arrow" href="#/" aria-label="ফিরে যাও">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+        </a>
+          <h1 style={{ margin: 0 }}>রিপোর্ট ট্র্যাক করুন</h1>
+        </div>
         <form className="stack-form" onSubmit={(event) => { event.preventDefault(); if (trackingId.trim()) window.location.hash = `#/track/${encodeURIComponent(trackingId.trim())}`; }}>
           <label>আপনার tracking ID<input required value={trackingId} onChange={(event) => setTrackingId(event.target.value)} placeholder="যেমন: PRH-..." /></label>
           <button className="primary-btn" type="submit">রিপোর্ট খুঁজুন</button>
@@ -515,7 +520,9 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="page">
-      <a className="back" href="#/">← হোম</a>
+      <a className="back-arrow" href="#/" aria-label="ফিরে যাও">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+        </a>
       <section className="card">
         <h1>নিরাপদে অপরাধের রিপোর্ট দিন</h1>
         <p className="meta">তাৎক্ষণিক বিপদের ক্ষেত্রে জরুরি সেবা ৯৯৯-এ কল করুন। এই app জরুরি সেবার বিকল্প নয়।</p>
@@ -616,7 +623,11 @@ export function FraudPage({ profile }: { profile: AppProfile | null }) {
   return (
     <div className="page">
       <section className="card">
-        <h1>প্রতারণার নম্বর যাচাই</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}><a className="back-arrow" href="#/" aria-label="ফিরে যাও">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+        </a>
+          <h1 style={{ margin: 0 }}>প্রতারণার নম্বর যাচাই</h1>
+        </div>
         <p className="meta">বিকাশ/নগদ OTP বা অন্য প্রতারণার সন্দেহজনক নম্বর খুঁজুন। এটি community report, সরকারি তালিকা নয়।</p>
         <div className="stack-form">
           <label>ফোন নম্বর<input value={number} onChange={(event) => setNumber(event.target.value)} inputMode="tel" placeholder="যেমন: 01XXXXXXXXX" /></label>
@@ -681,10 +692,6 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
   const [createBusy, setCreateBusy] = useState(false);
 
   // SOS state
-  const [sosMessage, setSosMessage] = useState('');
-  const [sosBusy, setSosBusy] = useState(false);
-  const [sosStatus, setSosStatus] = useState('');
-  const [sosError, setSosError] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
@@ -762,24 +769,6 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
     finally { setCreateBusy(false); }
   };
 
-  const sendEmergency = () => {
-    setSosError(''); setSosStatus('');
-    if (!profile) { setSosError('SOS পাঠাতে login করুন।'); return; }
-    if (!navigator.geolocation) { setSosError('এই browser GPS দেয় না।'); return; }
-    setSosBusy(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const result = await sendSos(position.coords.latitude, position.coords.longitude, 'GPS location', sosMessage.trim());
-          setSosStatus(`SOS server-এ নথিভুক্ত। ${result.notified_user_count} কাছের user ও ${result.notified_teams.length} team চিহ্নিত হয়েছে।`);
-          setSosMessage('');
-        } catch (err) { setSosError(err instanceof Error ? err.message : 'SOS পাঠানো যায়নি।'); }
-        finally { setSosBusy(false); }
-      },
-      () => { setSosError('লোকেশন অনুমতি দরকার। Browser location permission চালু করে আবার চেষ্টা করুন।'); setSosBusy(false); },
-      { enableHighAccuracy: true, timeout: 12000 },
-    );
-  };
 
   return (
     <div className="page">
@@ -790,13 +779,6 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
         <div><h1>পাশে আছি</h1><p>আপনার মহল্লার ভলান্টিয়ার টিম — বিপদে একসাথে</p></div>
       </header>
 
-      <section className="card sos-card">
-        <h2>জরুরি SOS</h2>
-        <p className="meta">আপনার GPS অবস্থান দিয়ে কাছের user ও team শনাক্ত হবে। এই MVP এখনো push notification বা SMS পাঠায় না—শুধু alert database-এ নথিভুক্ত করে এবং কাছের recipient গণনা করে। জীবন-ঝুঁকিতে ৯৯৯-এ কল করুন।</p>
-        <label>বার্তা (ঐচ্ছিক)<input className="input" value={sosMessage} onChange={(event) => setSosMessage(event.target.value)} maxLength={500} placeholder="কী ধরনের সাহায্য দরকার?" /></label>
-        <button className="sos-btn" onClick={sendEmergency} disabled={sosBusy || !profile}>{sosBusy ? 'অবস্থান নিচ্ছে…' : 'GPS দিয়ে SOS পাঠান'}</button>
-        {sosError && <Message error>{sosError}</Message>}{sosStatus && <Message>{sosStatus}</Message>}
-      </section>
 
       <div className="teams-toolbar">
         <div className="searchbar">
@@ -1211,7 +1193,11 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
 
   return (
     <div className="page">
-      <h1>Moderator / Admin — report control</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}><a className="back-arrow" href="#/" aria-label="ফিরে যাও">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+        </a>
+        <h1 style={{ margin: 0 }}>Moderator / Admin — report control</h1>
+      </div>
       <p className="meta">রিপোর্ট জমা হলেই public-এ যায়। এখান থেকে আপনি যাচাই, status update বা reject করে public feed থেকে সরাতে পারবেন। আপনার note reporter-এর Track page-এ দেখা যাবে।</p>
       {!profile && <Message error>Login করে profile সম্পূর্ণ করুন।</Message>}
       {stats && (
