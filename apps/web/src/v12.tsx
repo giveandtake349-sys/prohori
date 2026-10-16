@@ -179,7 +179,7 @@ export function SortToggle({ sort, onChange }: { sort: FeedSort; onChange: (s: F
   return (
     <div className="sort-toggle" role="group" aria-label="ফিড সাজান">
       <button type="button" className={sort === 'hot' ? 'fchip on' : 'fchip'} onClick={() => onChange('hot')}>
-        🔥 গুরুত্বপূর্ণ
+        গুরুত্বপূর্ণ
       </button>
       <button type="button" className={sort === 'new' ? 'fchip on' : 'fchip'} onClick={() => onChange('new')}>
         🆕 নতুন
@@ -318,7 +318,7 @@ export function SpotlightRail() {
 
   return (
     <section className="spotlight" aria-label="আজকের আলোচিত">
-      <h2 className="sec">🔥 আজকের আলোচিত</h2>
+      <h2 className="sec">আজকের আলোচিত</h2>
       <div className="spot-rail">
         {reports.map((r) => {
           const img = r.media?.find((m) => m && m.url)?.url;
