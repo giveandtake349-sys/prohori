@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLang } from './i18n';
-import { fetchHotspots, notifyTeamsAboutHotspot, type HotspotCell } from './api';
+import { fetchHotspots, fetchSafetyScore, notifyTeamsAboutHotspot, type HotspotCell, type SafetyScore } from './api';
 
 // Leaflet is loaded via CDN in index.html (no npm dependency).
 declare const L: any;
@@ -44,6 +44,13 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
+  // v15: route check state (declared early — used by map click handler)
+  const [routePts, setRoutePts] = useState<Array<[number, number]>>([]);
+  const [routeMode, setRouteMode] = useState(false);
+  const routeLineRef = useRef<any>(null);
+  // v15: route mode ref (used inside leaflet click handler)
+  const routeModeRef = useRef(false);
+  routeModeRef.current = routeMode;
   const [category, setCategory] = useState('');
   const [time, setTime] = useState('');
   const [hotspots, setHotspots] = useState<HotspotCell[]>([]);
@@ -53,8 +60,13 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
   const [locating, setLocating] = useState(false);
   const [notifying, setNotifying] = useState(false);
   const [notifyMsg, setNotifyMsg] = useState('');
-  const queryRef = useRef({ category, time });
-  queryRef.current = { category, time };
+  // v15: time slider (hour 0-23, null = all day)
+  const [hour, setHour] = useState<number | null>(null);
+  // v15: safety score
+  const [score, setScore] = useState<SafetyScore | null>(null);
+  const [routeResult, setRouteResult] = useState<'safe' | 'risky' | null>(null);
+  const queryRef = useRef({ category, time, hour });
+  queryRef.current = { category, time, hour };
 
   const loadHotspots = useCallback(async (lat: number, lng: number) => {
     const q = queryRef.current;
@@ -67,8 +79,11 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
         radius_km: 12,
         category: q.category || undefined,
         time: (q.time as 'night' | 'day') || undefined,
+        hour: q.hour ?? undefined,
       });
       setHotspots(res.hotspots);
+      // v15: safety score for the map center
+      fetchSafetyScore(lat, lng).then(setScore).catch(() => undefined);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'load failed');
     } finally {
@@ -89,6 +104,22 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
     mapRef.current = map;
     loadHotspots(DHAKA[0], DHAKA[1]);
     let t: ReturnType<typeof setTimeout> | null = null;
+    // v15: route mode — tap two points on the map to check the route.
+    map.on('click', (e: any) => {
+      if (!routeModeRef.current) return;
+      const pt: [number, number] = [e.latlng.lat, e.latlng.lng];
+      L.circleMarker(pt, { radius: 8, color: '#eab308', fillColor: '#eab308', fillOpacity: 1 }).addTo(layerRef.current);
+      setRoutePts((prev) => {
+        const next = [...prev, pt].slice(-2);
+        if (next.length === 2) {
+          if (routeLineRef.current) { layerRef.current.removeLayer(routeLineRef.current); }
+          routeLineRef.current = L.polyline(next, { color: '#eab308', weight: 4, dashArray: '8 6' }).addTo(layerRef.current);
+          checkRoute(next);
+          setRouteMode(false);
+        }
+        return next;
+      });
+    });
     map.on('moveend', () => {
       if (t) clearTimeout(t);
       t = setTimeout(() => {
@@ -111,7 +142,27 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
     const c = map.getCenter();
     loadHotspots(c.lat, c.lng);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, time]);
+  }, [category, time, hour]);
+
+  // v15: route check — does the straight line between two tapped points
+  // cross any hotspot circle? (state declared above; logic here)
+  const checkRoute = (pts: Array<[number, number]>) => {
+    if (pts.length !== 2 || hotspots.length === 0) { setRouteResult(null); return; }
+    const [a, b] = pts;
+    // point-to-segment distance (degrees → rough km via 111)
+    const risky = hotspots.some((h) => {
+      const px = h.lng, py = h.lat;
+      const dx = b[1] - a[1], dy = b[0] - a[0];
+      const len2 = dx * dx + dy * dy;
+      let t = len2 === 0 ? 0 : ((px - a[1]) * dx + (py - a[0]) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const cx = a[1] + t * dx, cy = a[0] + t * dy;
+      const distKm = Math.sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy)) * 111;
+      const radiusKm = (250 + h.count * 60) / 1000;
+      return distKm <= radiusKm + 0.3; // +300m buffer
+    });
+    setRouteResult(risky ? 'risky' : 'safe');
+  };
 
   // Draw circles.
   useEffect(() => {
@@ -233,6 +284,53 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
           ? 'গত ৩০ দিনের যাচাইকৃত রিপোর্ট • এলাকা দেখানো হয়, ব্যক্তি নয়'
           : 'Verified reports, last 30 days • areas shown, never individuals'}
       </p>
+
+      {/* v15: safety score */}
+      {score && (
+        <div className="hs2-score" style={{ margin: '0 14px 12px' }}>
+          <div className="n" style={{ color: score.score >= 70 ? '#4ade80' : score.score >= 40 ? '#eab308' : '#f87171' }}>
+            {score.score}<span style={{ fontSize: 16, color: 'var(--muted)' }}>/১০০</span>
+          </div>
+          <small>{bn ? 'এই এলাকার নিরাপত্তা স্কোর' : 'Area safety score'} — {score.label}{score.top_risk ? ` • ${score.top_risk}` : ''}</small>
+        </div>
+      )}
+
+      {/* v15: time slider */}
+      <div className="hs2-slider" style={{ margin: '0 14px 12px' }}>
+        <div className="t">
+          <span>{bn ? '⏰ সময় বেছে দেখো' : '⏰ Time of day'}</span>
+          <b>{hour == null ? (bn ? 'সারাদিন' : 'All day') : `${bn ? (hour >= 18 || hour < 4 ? 'রাত' : hour >= 4 && hour < 11 ? 'সকাল' : hour >= 11 && hour < 16 ? 'দুপুর' : 'বিকাল') : ''} ${hour % 12 === 0 ? 12 : hour % 12}টা`}</b>
+        </div>
+        <input
+          type="range" min={0} max={23} value={hour ?? 12}
+          onChange={(e) => setHour(Number(e.target.value))}
+          aria-label={bn ? 'সময় স্লাইডার' : 'Hour slider'}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button className={`fchip${hour == null ? ' on' : ''}`} onClick={() => setHour(null)}>{bn ? 'সারাদিন' : 'All day'}</button>
+          <button
+            className="fchip"
+            onClick={() => {
+              setRouteMode(true);
+              setRoutePts([]);
+              setRouteResult(null);
+              if (routeLineRef.current && layerRef.current) {
+                layerRef.current.removeLayer(routeLineRef.current);
+                routeLineRef.current = null;
+              }
+            }}
+          >
+            {routeMode ? (bn ? '📍 ম্যাপে ২টা জায়গা tap করো…' : '📍 Tap 2 points…') : (bn ? '🛣️ রুট চেক করো' : '🛣️ Check route')}
+          </button>
+        </div>
+        {routeResult && (
+          <p className="meta" style={{ marginTop: 8 }}>
+            {routeResult === 'risky'
+              ? <span className="badge-risk">⚠️ {bn ? 'ঝুঁকিপূর্ণ রুট — হটস্পট পার হচ্ছে' : 'Risky route — crosses hotspot'}</span>
+              : <span className="badge-safe">✅ {bn ? 'নিরাপদ রুট' : 'Safe route'}</span>}
+          </p>
+        )}
+      </div>
 
       {selected && (
         <div className="hotspot-sheet" role="dialog" aria-label={bn ? 'হটস্পট বিবরণ' : 'Hotspot detail'}>

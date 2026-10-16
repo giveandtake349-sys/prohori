@@ -4,10 +4,12 @@ import {
   createPetition,
   signPetition,
   fetchPetitionShare,
+  fetchPetitionSigners,
   sharePetition,
   type FeedSort,
   type Petition,
   type PetitionShare,
+  type PetitionSigner,
 } from './api';
 import { useLang } from './i18n';
 import ShareButtons from './share';
@@ -59,6 +61,10 @@ function PetitionCard({ p, signedIn, onSigned }: { p: Petition; signedIn: boolea
   const { t, label } = useLang();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // v15: signer list
+  const [signers, setSigners] = useState<PetitionSigner[]>([]);
+  const [showSigners, setShowSigners] = useState(false);
+  const [signersLoading, setSignersLoading] = useState(false);
 
   const sign = () => {
     setBusy(true);
@@ -67,6 +73,17 @@ function PetitionCard({ p, signedIn, onSigned }: { p: Petition; signedIn: boolea
       .then(() => onSigned())
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'sign failed'))
       .finally(() => setBusy(false));
+  };
+
+  const toggleSigners = () => {
+    if (!showSigners && signers.length === 0) {
+      setSignersLoading(true);
+      fetchPetitionSigners(p.id)
+        .then((d) => setSigners(d.signers))
+        .catch(() => undefined)
+        .finally(() => setSignersLoading(false));
+    }
+    setShowSigners(!showSigners);
   };
 
   return (
@@ -84,6 +101,26 @@ function PetitionCard({ p, signedIn, onSigned }: { p: Petition; signedIn: boolea
         <i style={{ width: `${p.progress_pct}%` }} />
       </div>
       <p className="meta">{p.signature_count} / {p.threshold} স্বাক্ষর ({p.progress_pct}%)</p>
+      {/* v15: signer avatars */}
+      {p.signature_count > 0 && (
+        <div>
+          <button className="fchip" onClick={toggleSigners} style={{ marginBottom: 4 }}>
+            {showSigners ? 'স্বাক্ষরকারী লুকাও' : `✍️ কারা স্বাক্ষর করেছে দেখো`}
+          </button>
+          {showSigners && (
+            <div className="signers-row">
+              {signersLoading && <small>লোড হচ্ছে…</small>}
+              {!signersLoading && signers.slice(0, 8).map((s, i) => (
+                <span key={i} className="signer-av" title={s.name}>{s.name.charAt(0)}</span>
+              ))}
+              {!signersLoading && signers.length > 0 && (
+                <small>{signers.map((s) => s.name).slice(0, 5).join(', ')}{signers.length > 5 ? ` +আরো ${signers.length - 5} জন` : ''}</small>
+              )}
+              {!signersLoading && signers.length === 0 && <small>এখনো কেউ না</small>}
+            </div>
+          )}
+        </div>
+      )}
       <PetitionShareBox petitionId={p.id} />
       {p.status === 'active' && signedIn && (
         <button className="fchip on" onClick={sign} disabled={busy}>

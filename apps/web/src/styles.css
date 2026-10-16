@@ -677,3 +677,34 @@ a.card.score-row { border-radius: 12px; padding: 12px 14px; }
 .sos-feed .responded { display: flex; gap: 6px; align-items: center; font-size: 13px; color: #4ade80; background: rgba(74, 222, 128, .08); padding: 10px 12px; border-radius: 10px; }
 .sos-feed .responder-names { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .sos-feed .responder-chip { font-size: 12px; background: rgba(74, 222, 128, .1); color: #4ade80; padding: 4px 10px; border-radius: 20px; }
+
+/* v15: team discovery tabs */
+.discover-tabs { display: flex; gap: 8px; margin: 4px 0 12px; }
+.dtab { flex: 1; border: 1.5px solid var(--line); background: var(--surface2); border-radius: 12px; padding: 11px 4px; font-size: 13px; font-weight: 700; color: var(--ink); font-family: inherit; cursor: pointer; }
+.dtab.on { border-color: var(--yellow); background: rgba(var(--yellow-rgb),.14); color: var(--yellow); }
+.gps-btn-alt { margin-top: 8px; border-style: dashed; }
+
+/* v15: hotspot 2.0 */
+.hs2-score { background: var(--surface2); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 0 0 12px; text-align: center; }
+.hs2-score .n { font-size: 34px; font-weight: 800; }
+.hs2-score small { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; }
+.hs2-slider { background: var(--surface2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-bottom: 12px; }
+.hs2-slider .t { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+.hs2-slider .t b { color: var(--yellow); }
+.hs2-slider input[type=range] { width: 100%; accent-color: var(--yellow); }
+.hs2-route { background: var(--surface2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-bottom: 12px; }
+.hs2-route h4 { font-size: 13px; margin-bottom: 8px; }
+.hs2-route .r { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 6px 0; }
+.badge-safe { background: rgba(34,197,94,.15); color: #4ade80; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-left: auto; white-space: nowrap; }
+.badge-risk { background: rgba(220,38,38,.15); color: #f87171; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-left: auto; white-space: nowrap; }
+
+/* v15: dabi signers */
+.signers-row { display: flex; align-items: center; gap: 0; margin-top: 10px; }
+.signer-av { width: 30px; height: 30px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--surface); display: flex; align-items: center; justify-content: center; font-size: 14px; margin-left: -10px; }
+.signer-av:first-child { margin-left: 0; }
+.signers-row small { color: var(--muted); font-size: 12px; margin-left: 8px; }
+
+/* v15: missing alert */
+.missing-alert-banner { background: linear-gradient(135deg,#7f1d1d,#dc2626); border: 1px solid #f87171; color: #fff; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+.missing-alert-banner .tag { display: inline-block; background: #fff; color: #dc2626; font-weight: 800; font-size: 11px; padding: 3px 10px; border-radius: 6px; margin-bottom: 6px; letter-spacing: 1px; }
+.missing-alert-banner p { font-size: 13px; color: #fecaca; margin: 4px 0 0; }

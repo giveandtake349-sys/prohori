@@ -727,6 +727,7 @@ export interface HotspotQuery {
   radius_km?: number;
   category?: string;
   time?: 'night' | 'day';
+  hour?: number; // v15: 0-23 time slider
 }
 
 export function fetchHotspots(q: HotspotQuery): Promise<{ hotspots: HotspotCell[] }> {
@@ -736,7 +737,36 @@ export function fetchHotspots(q: HotspotQuery): Promise<{ hotspots: HotspotCell[
   if (q.radius_km) p.set('radius_km', String(q.radius_km));
   if (q.category) p.set('category', q.category);
   if (q.time) p.set('time', q.time);
+  if (q.hour != null) p.set('hour', String(q.hour));
   return get(`/api/hotspots?${p.toString()}`);
+}
+
+// v15: area safety score 0-100
+export interface SafetyScore {
+  score: number;
+  incidents_30d: number;
+  hotspot_count: number;
+  top_risk: string | null;
+  label: string;
+}
+
+export function fetchSafetyScore(lat: number, lng: number): Promise<SafetyScore> {
+  return get(`/api/hotspots/safety-score?lat=${lat}&lng=${lng}`);
+}
+
+// v15: petition signers (recent, first names only)
+export interface PetitionSigner {
+  name: string;
+  signed_at: string;
+}
+
+export function fetchPetitionSigners(id: string): Promise<{ signers: PetitionSigner[] }> {
+  return get(`/api/petitions/${encodeURIComponent(id)}/signers`);
+}
+
+// v15: "আমি দেখেছি" — report a sighting of a missing person
+export function reportMissingSeen(id: string, note?: string): Promise<{ ok: boolean }> {
+  return post(`/api/missing/${encodeURIComponent(id)}/seen`, { note: note || undefined });
 }
 
 export function notifyTeamsAboutHotspot(body: {

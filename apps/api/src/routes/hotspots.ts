@@ -94,8 +94,9 @@ export async function aggregateHotspots(opts: {
   radiusKm: number;
   category?: string;
   time?: 'night' | 'day';
+  hour?: number; // v15: 0-23 — filter to incidents near this hour of day (±2h window)
 }): Promise<HotspotCell[]> {
-  const { lat, lng, radiusKm, category, time } = opts;
+  const { lat, lng, radiusKm, category, time, hour } = opts;
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000);
 
   // Bounding-box pre-filter (cheap), precise haversine filter in JS (MVP pattern).
@@ -120,18 +121,27 @@ export async function aggregateHotspots(opts: {
     )) as HotspotRow[];
 
   const inRadius = rows.filter((r) => haversineKm(lat, lng, r.lat, r.lng) <= radiusKm);
+  // v15: hour slider — incidents within ±2 hours of the selected hour (wraps midnight).
+  const hourFiltered =
+    hour != null
+      ? inRadius.filter((r) => {
+          const h = r.occurredAt.getHours();
+          const d = Math.min(Math.abs(h - hour), 24 - Math.abs(h - hour));
+          return d <= 2;
+        })
+      : inRadius;
   const timeFiltered =
     time === 'night'
-      ? inRadius.filter((r) => {
+      ? hourFiltered.filter((r) => {
           const h = r.occurredAt.getHours();
           return h >= 18 || h < 6;
         })
       : time === 'day'
-        ? inRadius.filter((r) => {
+        ? hourFiltered.filter((r) => {
             const h = r.occurredAt.getHours();
             return h >= 6 && h < 18;
           })
-        : inRadius;
+        : hourFiltered;
 
   // Grid into ~500m cells.
   const cells = new Map<string, { lat: number; lng: number; rows: HotspotRow[] }>();
@@ -178,6 +188,7 @@ const hotspotsQuerySchema = z.object({
   radius_km: z.coerce.number().min(0.5).max(50).default(10),
   category: z.string().max(30).optional(),
   time: z.enum(['night', 'day']).optional(),
+  hour: z.coerce.number().int().min(0).max(23).optional(), // v15: time slider
 });
 
 // GET /api/hotspots — aggregate crime hotspots near a point.
@@ -194,8 +205,39 @@ hotspotsRouter.get('/', async (req: Request, res: Response, next: NextFunction) 
       radiusKm: q.data.radius_km,
       category: q.data.category,
       time: q.data.time,
+      hour: q.data.hour,
     });
     res.json({ hotspots: cells });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// v15: GET /api/hotspots/safety-score?lat=&lng= — 0-100 safety score for an area.
+// Based on verified reports in the last 30 days within 3km: fewer/severer
+// incidents = higher score. Also returns the top risk factor text.
+hotspotsRouter.get('/safety-score', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      res.status(400).json({ error: 'lat and lng required' });
+      return;
+    }
+    const cells = await aggregateHotspots({ lat, lng, radiusKm: 3 });
+    const total = cells.reduce((s, c) => s + c.count, 0);
+    const highCells = cells.filter((c) => c.risk === 'high').length;
+    // Score: start at 100, lose points per incident (weighted by severity).
+    let score = 100 - total * 3 - highCells * 10;
+    score = Math.max(5, Math.min(100, Math.round(score)));
+    const worst = cells[0];
+    res.json({
+      score,
+      incidents_30d: total,
+      hotspot_count: cells.length,
+      top_risk: worst ? worst.topCategories.join(', ') : null,
+      label: score >= 70 ? 'নিরাপদ' : score >= 40 ? 'সতর্ক থাকুন' : 'ঝুঁকিপূর্ণ',
+    });
   } catch (e) {
     next(e);
   }

@@ -1,10 +1,12 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, isNotNull } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, isPgUniqueViolation, uuidParam } from '../validate.js';
-import { missingPersons, missingFollowers } from 'db';
+import { missingPersons, missingFollowers, users } from 'db';
+import { haversineKm } from '../lib/geo.js';
+import { sendToUserIds } from '../lib/notify.js';
 
 export const missingRouter = Router();
 
@@ -47,6 +49,36 @@ missingRouter.post(
           reporterId: req.appProfile!.id,
         })
         .returning();
+      // v15: AMBER-style alert — if a location was given, push to all users
+      // within 10 km (reporter excluded). Fire-and-forget.
+      if (row.lastSeenLat != null && row.lastSeenLng != null) {
+        void (async () => {
+          try {
+            const candidates = await db
+              .select({ id: users.id, lastLat: users.lastLat, lastLng: users.lastLng })
+              .from(users)
+              .where(and(isNotNull(users.lastLat), isNotNull(users.lastLng)));
+            const nearby = candidates
+              .filter(
+                (u) =>
+                  u.id !== req.appProfile!.id &&
+                  u.lastLat !== null &&
+                  u.lastLng !== null &&
+                  haversineKm(row.lastSeenLat!, row.lastSeenLng!, u.lastLat, u.lastLng) <= 10,
+              )
+              .map((u) => u.id);
+            if (nearby.length > 0) {
+              await sendToUserIds(nearby, {
+                title: '⚠️ MISSING ALERT — নিখোঁজ!',
+                body: `${row.name} (${row.lastSeenText ?? 'অজ্ঞাত স্থান'}) এলাকায় নিখোঁজ — চোখ রাখুন!`,
+                data: { kind: 'missing_alert', missing_id: row.id },
+              });
+            }
+          } catch (e) {
+            console.warn('[missing] alert push failed:', (e as Error).message);
+          }
+        })();
+      }
       res.status(201).json(row);
     } catch (e) {
       next(e);
@@ -125,6 +157,50 @@ missingRouter.post(
     }
   },
 );
+
+// v15: POST /api/missing/:id/seen — "আমি দেখেছি" — someone spotted the person.
+// Notifies the reporter instantly (push). Rate-limited: one sighting per user
+// per person per hour (best-effort, in-memory).
+const seenCooldown = new Map<string, number>();
+missingRouter.post('/:id/seen', requireAuth, requireProfile, async (req, res, next) => {
+  try {
+    const id = uuidParam(req, res, 'id');
+    if (!id) return;
+    const me = req.appProfile!;
+    const key = `${me.id}:${id}`;
+    const last = seenCooldown.get(key) ?? 0;
+    if (Date.now() - last < 3600_000) {
+      res.status(429).json({ error: 'এক ঘণ্টায় একবার জানাতে পারবেন' });
+      return;
+    }
+    seenCooldown.set(key, Date.now());
+    const [row] = await db.select().from(missingPersons).where(eq(missingPersons.id, id));
+    if (!row) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    if (row.status !== 'missing') {
+      res.json({ ok: true, already_found: true });
+      return;
+    }
+    const note = typeof req.body?.note === 'string' ? req.body.note.slice(0, 300) : '';
+    // Bump activity so the case stays hot.
+    await db
+      .update(missingPersons)
+      .set({ lastActivityAt: new Date() })
+      .where(eq(missingPersons.id, id));
+    if (row.reporterId && row.reporterId !== me.id) {
+      void sendToUserIds([row.reporterId], {
+        title: '👀 কেউ দেখেছে!',
+        body: `${row.name}-কে কেউ দেখেছে বলে জানিয়েছে${note ? ': ' + note : ''} — দ্রুত যোগাযোগ করুন!`,
+        data: { kind: 'missing_seen', missing_id: id },
+      }).catch((e: unknown) => console.warn('[missing] seen push failed:', (e as Error).message));
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
 
 // POST /api/missing/:id/follow — follow a missing-person entry. 409 if
 // already following.

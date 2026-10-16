@@ -825,6 +825,12 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyError, setNearbyError] = useState('');
   const [error, setError] = useState('');
+  // v15: 3-tab discovery — area (my thana) / nearby (GPS 8km) / all
+  const [discoverTab, setDiscoverTab] = useState<'area' | 'nearby' | 'all'>('area');
+  const [areaTeams, setAreaTeams] = useState<Team[]>([]);
+  const [areaLoading, setAreaLoading] = useState(false);
+  const [areaError, setAreaError] = useState('');
+  const [areaThanaName, setAreaThanaName] = useState('');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'' | TeamType>('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -865,6 +871,51 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
       .finally(() => setLoading(false));
   };
   useEffect(reload, [typeFilter, debouncedSearch]);
+
+  // v15: "আমার এলাকা" — GPS → nearest thana → teams of that thana.
+  const loadMyArea = () => {
+    setAreaError('');
+    setAreaTeams([]);
+    if (!navigator.geolocation) { setAreaError('এই browser GPS দেয় না।'); return; }
+    setAreaLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const { thanas: all } = await fetchThanas();
+          let best: { id: string; name: string } | null = null;
+          let bestD = Infinity;
+          for (const t of all) {
+            // haversine (km)
+            const R = 6371;
+            const dLa = ((t.lat - latitude) * Math.PI) / 180;
+            const dLo = ((t.lng - longitude) * Math.PI) / 180;
+            const a =
+              Math.sin(dLa / 2) * Math.sin(dLa / 2) +
+              Math.cos((latitude * Math.PI) / 180) * Math.cos((t.lat * Math.PI) / 180) *
+              Math.sin(dLo / 2) * Math.sin(dLo / 2);
+            const d = 2 * R * Math.asin(Math.sqrt(a));
+            if (d < bestD) { bestD = d; best = { id: t.id, name: t.name }; }
+          }
+          if (!best) throw new Error('thana পাওয়া যায়নি');
+          setAreaThanaName(best.name);
+          let list = (await fetchTeams({ thana_id: best.id, type: typeFilter || undefined })).teams;
+          if (debouncedSearch) {
+            const q = debouncedSearch.toLowerCase();
+            list = list.filter((t) => t.name.toLowerCase().includes(q) || (t.elaka_text ?? t.area_text ?? '').toLowerCase().includes(q));
+          }
+          setAreaTeams(list);
+        } catch {
+          setAreaError('তোমার এলাকার team লোড হয়নি।');
+        } finally {
+          setAreaLoading(false);
+        }
+      },
+      () => { setAreaError('লোকেশন অনুমতি দরকার। Browser location permission চালু করে আবার চেষ্টা করুন।'); setAreaLoading(false); },
+      { enableHighAccuracy: true, timeout: 12000 },
+    );
+  };
+  useEffect(() => { if (discoverTab === 'area') loadMyArea(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [discoverTab, typeFilter, debouncedSearch]);
 
   const loadNearby = () => {
     setNearbyError(''); setNearby([]);
@@ -953,19 +1004,52 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
         </div>
       </div>
 
-      <div className="section-heading">
-        <h2 className="sec">📍 আশেপাশের টিম</h2>
-        <button className="small-btn" onClick={loadNearby} disabled={nearbyLoading}>{nearbyLoading ? 'খুঁজছে…' : '↻ রিফ্রেশ'}</button>
+      {/* v15: 3-tab discovery — আমার এলাকা / আশেপাশে / সব টিম */}
+      <div className="discover-tabs">
+        <button className={`dtab${discoverTab === 'area' ? ' on' : ''}`} onClick={() => setDiscoverTab('area')}>📍 আমার এলাকা</button>
+        <button className={`dtab${discoverTab === 'nearby' ? ' on' : ''}`} onClick={() => setDiscoverTab('nearby')}>🧭 আশেপাশে</button>
+        <button className={`dtab${discoverTab === 'all' ? ' on' : ''}`} onClick={() => setDiscoverTab('all')}>🌍 সব টিম</button>
       </div>
-      {nearbyError && <Message error>{nearbyError}</Message>}
-      {!nearbyError && nearbyLoading && <p className="state">আশেপাশের team খুঁজছে…</p>}
-      {!nearbyError && !nearbyLoading && nearby.length === 0 && <p className="state">আশেপাশে কোনো team পাওয়া যায়নি। নিচে সব team দেখুন।</p>}
-      <div className="feed">{nearby.map((team) => <TeamCard key={team.id} team={team} />)}</div>
-
-      <div className="section-heading">
-        <h2 className="sec">🌍 সব টিম</h2>
+      <div style={{ margin: '0 0 12px' }}>
         <button className="small-btn" onClick={() => { setShowCreate((v) => !v); setStep(1); }}>{showCreate ? 'ফর্ম বন্ধ' : '＋ নতুন টিম'}</button>
       </div>
+
+      {discoverTab === 'area' && (
+        <>
+          <div className="section-heading">
+            <h2 className="sec">📍 আমার এলাকা{areaThanaName ? ` — ${areaThanaName}` : ''}</h2>
+            <button className="small-btn" onClick={loadMyArea} disabled={areaLoading}>{areaLoading ? 'খুঁজছে…' : '↻ রিফ্রেশ'}</button>
+          </div>
+          {areaError && <Message error>{areaError}</Message>}
+          {!areaError && areaLoading && <p className="state">তোমার এলাকার team খুঁজছে…</p>}
+          {!areaError && !areaLoading && areaTeams.length === 0 && <p className="state">তোমার থানায় এখনো কোনো team নেই — প্রথম team খুলে ফেলো! 👇</p>}
+          <div className="feed">{areaTeams.map((team) => <TeamCard key={team.id} team={team} />)}</div>
+        </>
+      )}
+
+      {discoverTab === 'nearby' && (
+        <>
+          <div className="section-heading">
+            <h2 className="sec">🧭 আশেপাশে (৮ কিমি)</h2>
+            <button className="small-btn" onClick={loadNearby} disabled={nearbyLoading}>{nearbyLoading ? 'খুঁজছে…' : '↻ রিফ্রেশ'}</button>
+          </div>
+          {nearbyError && <Message error>{nearbyError}</Message>}
+          {!nearbyError && nearbyLoading && <p className="state">আশেপাশের team খুঁজছে…</p>}
+          {!nearbyError && !nearbyLoading && nearby.length === 0 && <p className="state">আশেপাশে কোনো team পাওয়া যায়নি।</p>}
+          <div className="feed">{nearby.map((team) => <TeamCard key={team.id} team={team} />)}</div>
+        </>
+      )}
+
+      {discoverTab === 'all' && (
+        <>
+          <div className="section-heading">
+            <h2 className="sec">🌍 সব টিম</h2>
+          </div>
+          {error && <Message error>{error}</Message>}
+          {loading && <p className="state">লোড হচ্ছে…</p>}
+          <div className="feed">{teams.map((team) => <TeamCard key={team.id} team={team} />)}</div>
+        </>
+      )}
 
       {showCreate && (
         <div className="card stack-form">
@@ -1006,6 +1090,26 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
                   📍 Map-এ টিমের location pin করো <span className="req">*</span>
                 </button>
               )}
+              {/* v15: GPS — one tap to use current location as the pin */}
+              <button
+                type="button"
+                className="gps-btn gps-btn-alt"
+                onClick={() => {
+                  if (!navigator.geolocation) { setCreateError('এই browser GPS দেয় না।'); return; }
+                  setCreateError('');
+                  navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                      setPinLat(Number(pos.coords.latitude.toFixed(6)));
+                      setPinLng(Number(pos.coords.longitude.toFixed(6)));
+                      setShowMap(true);
+                    },
+                    () => setCreateError('লোকেশন অনুমতি দরকার। Browser location permission চালু করো।'),
+                    { enableHighAccuracy: true, timeout: 12000 },
+                  );
+                }}
+              >
+                ◎ আমার location ব্যবহার করো
+              </button>
               {showMap && (
                 <div className="map-wrap">
                   <MapPicker lat={pinLat} lng={pinLng} onPick={(la, ln) => { setPinLat(la); setPinLng(ln); }} />

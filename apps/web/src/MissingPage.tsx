@@ -4,10 +4,12 @@ import {
   createMissingPerson,
   markMissingFound,
   missingShareUrl,
+  reportMissingSeen,
   shareMissing,
   type FeedSort,
   type MissingPerson,
 } from './api';
+import MapPicker from './MapPicker';
 import { supabase } from './supabaseClient';
 import { useLang } from './i18n';
 import ShareButtons from './share';
@@ -18,6 +20,10 @@ function PersonCard({ p, signedIn, onChanged }: { p: MissingPerson; signedIn: bo
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [confirming, setConfirming] = useState(false);
+  // v15: "আমি দেখেছি"
+  const [seenBusy, setSeenBusy] = useState(false);
+  const [seenDone, setSeenDone] = useState(false);
+  const [seenErr, setSeenErr] = useState('');
 
   const markFound = () => {
     setBusy(true);
@@ -29,6 +35,16 @@ function PersonCard({ p, signedIn, onChanged }: { p: MissingPerson; signedIn: bo
       })
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'failed'))
       .finally(() => setBusy(false));
+  };
+
+  const reportSeen = () => {
+    if (!signedIn) { setSeenErr('জানাতে login করুন।'); return; }
+    setSeenBusy(true);
+    setSeenErr('');
+    reportMissingSeen(p.id)
+      .then(() => setSeenDone(true))
+      .catch((e: unknown) => setSeenErr(e instanceof Error ? e.message : 'failed'))
+      .finally(() => setSeenBusy(false));
   };
 
   return (
@@ -67,6 +83,15 @@ function PersonCard({ p, signedIn, onChanged }: { p: MissingPerson; signedIn: bo
       </div>
       {p.status === 'missing' && (
         <>
+          {/* v15: "আমি দেখেছি" — sighting report → reporter gets push */}
+          {!seenDone ? (
+            <button className="fchip on" onClick={reportSeen} disabled={seenBusy} style={{ marginTop: 8 }}>
+              {seenBusy ? '…' : '👀 আমি দেখেছি — জানাও'}
+            </button>
+          ) : (
+            <p className="meta ok" style={{ marginTop: 8 }}>✓ জানানো হয়েছে — রিপোর্টারকে push গেছে</p>
+          )}
+          {seenErr && <p className="state err">{seenErr}</p>}
           {!confirming ? (
             <button className="fchip" onClick={() => setConfirming(true)}>খুঁজে পাওয়া গেছে?</button>
           ) : (
@@ -103,6 +128,10 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
   const [lastSeenText, setLastSeenText] = useState('');
   const [lastSeenDate, setLastSeenDate] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+  // v15: last-seen location → 10km AMBER alert
+  const [seenLat, setSeenLat] = useState<number | null>(null);
+  const [seenLng, setSeenLng] = useState<number | null>(null);
+  const [showSeenMap, setShowSeenMap] = useState(false);
   const [formErr, setFormErr] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -151,6 +180,8 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
           age: age ? Number(age) : null,
           gender: gender || null,
           photo_url: finalPhotoUrl,
+          last_seen_lat: seenLat,
+          last_seen_lng: seenLng,
           last_seen_text: lastSeenText.trim() || null,
           last_seen_date: lastSeenDate ? new Date(lastSeenDate).toISOString() : null,
           contact_phone: contactPhone.trim(),
@@ -159,6 +190,7 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
         setName(''); setAge(''); setGender('');
         setPhotoFile(null); setPhotoPreview(''); setUploadErr('');
         setLastSeenText(''); setLastSeenDate(''); setContactPhone('');
+        setSeenLat(null); setSeenLng(null); setShowSeenMap(false);
         setFilter('missing');
         load();
       } catch (e: unknown) {
@@ -223,6 +255,17 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
           {uploadErr && <p className="state err">{uploadErr}</p>}
           <label className="form-label">সর্বশেষ কোথায় দেখা গেছে</label>
           <input className="input" value={lastSeenText} onChange={(e) => setLastSeenText(e.target.value)} placeholder="যেমন: গুলিস্তান বাস স্ট্যান্ড" maxLength={300} />
+          {/* v15: map pin → 10km radius e AMBER alert jabe */}
+          {!showSeenMap ? (
+            <button type="button" className="fchip" onClick={() => setShowSeenMap(true)} style={{ marginTop: 8 }}>
+              📍 ম্যাপে শেষ দেখার জায়গা pin করো (ঐচ্ছিক)
+            </button>
+          ) : (
+            <div className="map-wrap" style={{ marginTop: 8 }}>
+              <MapPicker lat={seenLat} lng={seenLng} onPick={(la, ln) => { setSeenLat(la); setSeenLng(ln); }} />
+              {seenLat !== null && <p className="meta ok">✓ Pin বসেছে — ১০ কিমির ভেতর সবাইকে alert যাবে</p>}
+            </div>
+          )}
           <label className="form-label">সর্বশেষ দেখার তারিখ</label>
           <input className="input" type="date" value={lastSeenDate} onChange={(e) => setLastSeenDate(e.target.value)} />
           <label className="form-label">যোগাযোগের নম্বর *</label>

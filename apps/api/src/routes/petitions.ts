@@ -4,7 +4,7 @@ import { eq, desc, count, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, uuidParam, isPgUniqueViolation } from '../validate.js';
-import { petitions, petitionSignatures, petitionEvents, reports } from 'db';
+import { petitions, petitionSignatures, petitionEvents, reports, users } from 'db';
 
 export const petitionsRouter = Router();
 
@@ -118,6 +118,31 @@ petitionsRouter.post(
     }
   },
 );
+
+// v15: GET /api/petitions/:id/signers — recent signers (public, names only).
+// Shows who signed so the community can see real people behind the demand.
+petitionsRouter.get('/:id/signers', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = uuidParam(req, res, 'id');
+    if (!id) return;
+    const rows = await db
+      .select({ name: users.name, createdAt: petitionSignatures.createdAt })
+      .from(petitionSignatures)
+      .innerJoin(users, eq(petitionSignatures.userId, users.id))
+      .where(eq(petitionSignatures.petitionId, id))
+      .orderBy(desc(petitionSignatures.createdAt))
+      .limit(20);
+    res.json({
+      signers: rows.map((r) => ({
+        // First name only — privacy: never expose full identity.
+        name: r.name.split(' ')[0],
+        signed_at: r.createdAt,
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
 
 async function withCounts(rows: Array<typeof petitions.$inferSelect>) {
   return Promise.all(
