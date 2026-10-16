@@ -16,6 +16,7 @@ import { shareRouter } from './routes/share.js';
 import { geoRouter } from './routes/geo.js';
 import { teamsRouter } from './routes/teams.js';
 import { sosRouter } from './routes/sos.js';
+import { pushRouter } from './routes/push.js';
 import { cronRouter } from './routes/cron.js';
 import { hotspotsRouter } from './routes/hotspots.js';
 
@@ -44,6 +45,7 @@ app.use('/share', shareRouter);
 app.use('/api/geo', geoRouter);
 app.use('/api/teams', teamsRouter);
 app.use('/api/sos', sosRouter);
+app.use('/api/push', pushRouter);
 app.use('/api/cron', cronRouter);
 app.use('/api/hotspots', hotspotsRouter);
 

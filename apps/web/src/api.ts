@@ -351,7 +351,51 @@ export function sendSos(lat: number, lng: number, addressText: string, message?:
 
 export function fetchActiveSos(lat: number, lng: number) {
   const query = new URLSearchParams({ lat: String(lat), lng: String(lng), radius_km: '10' });
-  return get<{ sos: Array<{ id: string; message: string | null; reporter_name: string; created_at: string; distance_km: number }>; count: number }>(`/api/sos/active?${query.toString()}`);
+  return get<{
+    sos: Array<{
+      id: string;
+      message: string | null;
+      reporter_name: string;
+      created_at: string;
+      distance_km: number;
+      address_text?: string | null;
+      responders: Array<{ name: string; created_at: string }>;
+      i_responded: boolean;
+      mine: boolean;
+    }>;
+    count: number;
+  }>(`/api/sos/active?${query.toString()}`);
+}
+
+export function respondSos(sosId: string) {
+  return post<{ ok: boolean; responders: number }>(
+    `/api/sos/${encodeURIComponent(sosId)}/respond`,
+    {},
+  );
+}
+
+export function cancelSos(sosId: string) {
+  return patch<{ id: string; status: string }>(`/api/sos/${encodeURIComponent(sosId)}`, {
+    status: 'cancelled',
+  });
+}
+
+export function fetchMySos() {
+  return get<{
+    sos: {
+      id: string;
+      lat: number;
+      lng: number;
+      address_text: string | null;
+      message: string | null;
+      created_at: string;
+      responders: Array<{ name: string; created_at: string }>;
+    } | null;
+  }>('/api/sos/mine');
+}
+
+export function registerPushToken(token: string) {
+  return post<{ ok: boolean }>('/api/push/token', { token, platform: 'web' });
 }
 
 export function fetchDivisions() {

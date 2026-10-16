@@ -227,6 +227,25 @@ export const sosAlerts = pgTable('sos_alerts', {
 });
 
 /**
+ * SOS responses: volunteers who tapped "আমি যাচ্ছি" on an active SOS alert.
+ * One response per user per SOS.
+ */
+export const sosResponses = pgTable(
+  'sos_responses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sosId: uuid('sos_id')
+      .notNull()
+      .references(() => sosAlerts.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('sos_responses_sos_user_uniq').on(t.sosId, t.userId)],
+);
+
+/**
  * Police-action claims by citizens: "byabostha neya hoyeche / hoyni".
  * claim: 'action_taken' | 'no_action'. One claim per user per report
  * (users can change their claim; counts are recomputed on every write).
@@ -449,6 +468,7 @@ export type District = typeof districts.$inferSelect;
 export type VolunteerTeam = typeof volunteerTeams.$inferSelect;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type SosAlert = typeof sosAlerts.$inferSelect;
+export type SosResponse = typeof sosResponses.$inferSelect;
 export type DeviceToken = typeof deviceTokens.$inferSelect;
 export type Petition = typeof petitions.$inferSelect;
 export type PetitionSignature = typeof petitionSignatures.$inferSelect;

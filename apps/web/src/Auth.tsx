@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { fetchProfile, saveProfile, type AppProfile } from './api';
+import { fetchProfile, saveProfile, registerPushToken, type AppProfile } from './api';
 import { supabase } from './supabaseClient';
+import { getPushToken } from './lib/push';
 
 export interface AuthState {
   session: Session | null;
@@ -45,6 +46,22 @@ export function useAuthState(): AuthState {
   const [profileLoading, setProfileLoading] = useState(false);
   const sessionRef = useRef<Session | null>(null);
   const handledTokenRef = useRef<string | null>(null);
+  const pushRegisteredForRef = useRef<string | null>(null);
+
+  // Register the FCM device token once per session (best-effort, never blocks).
+  const maybeRegisterPush = (sess: Session) => {
+    const key = sess.access_token;
+    if (pushRegisteredForRef.current === key) return;
+    pushRegisteredForRef.current = key;
+    void (async () => {
+      try {
+        const token = await getPushToken();
+        if (token) await registerPushToken(token);
+      } catch {
+        /* push is optional — ignore failures */
+      }
+    })();
+  };
 
   // Fetch the profile from the API. On success the result is cached; on
   // failure the currently shown (cached) profile is KEPT — a slow or cold
@@ -55,6 +72,7 @@ export function useAuthState(): AuthState {
       const response = await fetchProfile();
       setProfile(response.profile);
       saveCachedProfile(response.profile);
+      if (response.profile) maybeRegisterPush(sess);
       return response.profile;
     } catch {
       const fallback = loadCachedProfile();
@@ -72,6 +90,7 @@ export function useAuthState(): AuthState {
       setSession(nextSession);
       if (!nextSession) {
         handledTokenRef.current = null;
+        pushRegisteredForRef.current = null;
         setProfile(null);
         setProfileLoading(false);
         saveCachedProfile(null);

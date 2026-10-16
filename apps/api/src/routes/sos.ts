@@ -1,14 +1,28 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { eq, and, isNotNull, count } from 'drizzle-orm';
+import { eq, and, isNotNull, count, gte, lt, inArray, desc } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireProfile } from '../auth.js';
 import { validateBody, uuidParam } from '../validate.js';
 import { haversineKm } from '../lib/geo.js';
 import { sendToUserIds } from '../lib/notify.js';
-import { sosAlerts, users, volunteerTeams, teamMembers, thanas } from 'db';
+import { sosAlerts, sosResponses, users, volunteerTeams, teamMembers, thanas } from 'db';
 
 export const sosRouter = Router();
+
+// SOS alerts older than this are treated as expired (lazy-marked on read).
+const SOS_TTL_MS = 30 * 60 * 1000;
+// Max SOS broadcasts per user per rolling hour (abuse protection).
+const SOS_MAX_PER_HOUR = 3;
+
+async function expireStaleSos(): Promise<void> {
+  await db
+    .update(sosAlerts)
+    .set({ status: 'expired' })
+    .where(
+      and(eq(sosAlerts.status, 'active'), lt(sosAlerts.createdAt, new Date(Date.now() - SOS_TTL_MS))),
+    );
+}
 
 const createSosSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -41,6 +55,23 @@ sosRouter.post(
         .where(eq(users.id, req.appProfile!.id));
       if (!reporter) {
         res.status(404).json({ error: 'user not found' });
+        return;
+      }
+
+      // Rate limit: max SOS_MAX_PER_HOUR broadcasts per rolling hour.
+      const [{ n: recentCount }] = await db
+        .select({ n: count() })
+        .from(sosAlerts)
+        .where(
+          and(
+            eq(sosAlerts.userId, req.appProfile!.id),
+            gte(sosAlerts.createdAt, new Date(Date.now() - 3600_000)),
+          ),
+        );
+      if (recentCount >= SOS_MAX_PER_HOUR) {
+        res.status(429).json({
+          error: 'গত এক ঘণ্টায় আপনি ৩টি SOS পাঠিয়েছেন। কিছুক্ষণ পরে আবার চেষ্টা করুন।',
+        });
         return;
       }
 
@@ -194,9 +225,95 @@ sosRouter.patch(
   },
 );
 
+// POST /api/sos/:id/respond — a volunteer responds to an active SOS.
+// One response per user per SOS. Notifies the reporter via push.
+sosRouter.post(
+  '/:id/respond',
+  requireAuth,
+  requireProfile,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = uuidParam(req, res, 'id');
+      if (!id) return;
+      await expireStaleSos();
+      const [alert] = await db.select().from(sosAlerts).where(eq(sosAlerts.id, id));
+      if (!alert) {
+        res.status(404).json({ error: 'SOS পাওয়া যায়নি।' });
+        return;
+      }
+      if (alert.status !== 'active') {
+        res.status(410).json({ error: 'এই SOS আর সক্রিয় নেই।' });
+        return;
+      }
+      const me = req.appProfile!.id;
+      const existing = await db
+        .select({ id: sosResponses.id })
+        .from(sosResponses)
+        .where(and(eq(sosResponses.sosId, id), eq(sosResponses.userId, me)));
+      if (existing.length > 0) {
+        res.status(409).json({ error: 'আপনি ইতিমধ্যে respond করেছেন।' });
+        return;
+      }
+      await db.insert(sosResponses).values({ sosId: id, userId: me });
+      const [{ n }] = await db
+        .select({ n: count() })
+        .from(sosResponses)
+        .where(eq(sosResponses.sosId, id));
+      // Notify the reporter (fire-and-forget).
+      if (alert.userId !== me) {
+        void sendToUserIds([alert.userId], {
+          title: `✅ ${req.appProfile!.name} আসছে!`,
+          body: 'আপনার SOS-এ একজন volunteer respond করেছে।',
+          data: { kind: 'sos_respond', sos_id: id },
+        });
+      }
+      res.status(201).json({ ok: true, responders: n });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+// GET /api/sos/mine — the signed-in user's currently active SOS (with responders).
+sosRouter.get('/mine', requireAuth, requireProfile, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await expireStaleSos();
+    const [alert] = await db
+      .select()
+      .from(sosAlerts)
+      .where(and(eq(sosAlerts.userId, req.appProfile!.id), eq(sosAlerts.status, 'active')))
+      .orderBy(desc(sosAlerts.createdAt))
+      .limit(1);
+    if (!alert) {
+      res.json({ sos: null });
+      return;
+    }
+    const responders = await db
+      .select({ name: users.name, createdAt: sosResponses.createdAt })
+      .from(sosResponses)
+      .innerJoin(users, eq(sosResponses.userId, users.id))
+      .where(eq(sosResponses.sosId, alert.id))
+      .orderBy(sosResponses.createdAt);
+    res.json({
+      sos: {
+        id: alert.id,
+        lat: alert.lat,
+        lng: alert.lng,
+        address_text: alert.addressText,
+        message: alert.message,
+        created_at: alert.createdAt,
+        responders,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // GET /api/sos/active?lat=&lng=&radius_km=5 — active SOS alerts in the area
 // (powers the alert feed). Reporter name is included so rescuers know who
-// needs help; no phone numbers are exposed.
+// needs help; no phone numbers are exposed. Alerts older than 30 min are
+// lazily expired and excluded. Responder names are included per alert.
 sosRouter.get('/active', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lat = Number(req.query.lat);
@@ -206,9 +323,11 @@ sosRouter.get('/active', requireAuth, async (req: Request, res: Response, next: 
       res.status(400).json({ error: 'lat and lng are required numbers' });
       return;
     }
+    await expireStaleSos();
     const rows = await db
       .select({
         id: sosAlerts.id,
+        userId: sosAlerts.userId,
         lat: sosAlerts.lat,
         lng: sosAlerts.lng,
         addressText: sosAlerts.addressText,
@@ -220,19 +339,58 @@ sosRouter.get('/active', requireAuth, async (req: Request, res: Response, next: 
       .from(sosAlerts)
       .innerJoin(users, eq(sosAlerts.userId, users.id))
       .where(eq(sosAlerts.status, 'active'));
-    const inArea = rows
-      .filter((r) => haversineKm(lat, lng, r.lat, r.lng) <= radiusKm)
-      .map((r) => ({
-        id: r.id,
-        lat: r.lat,
-        lng: r.lng,
-        address_text: r.addressText,
-        message: r.message,
-        reporter_name: r.reporterName,
-        created_at: r.createdAt,
-        distance_km: Math.round(haversineKm(lat, lng, r.lat, r.lng) * 10) / 10,
-      }));
-    res.json({ sos: inArea, count: inArea.length });
+    const inArea = rows.filter((r) => haversineKm(lat, lng, r.lat, r.lng) <= radiusKm);
+    // Batch-load responders for all returned alerts (one query).
+    const responderMap = new Map<string, Array<{ name: string; created_at: Date }>>();
+    if (inArea.length > 0) {
+      const respRows = await db
+        .select({ sosId: sosResponses.sosId, name: users.name, createdAt: sosResponses.createdAt })
+        .from(sosResponses)
+        .innerJoin(users, eq(sosResponses.userId, users.id))
+        .where(
+          inArray(
+            sosResponses.sosId,
+            inArea.map((r) => r.id),
+          ),
+        );
+      for (const rr of respRows) {
+        const list = responderMap.get(rr.sosId) ?? [];
+        list.push({ name: rr.name, created_at: rr.createdAt });
+        responderMap.set(rr.sosId, list);
+      }
+    }
+    const me = req.authIdentity?.id ?? null;
+    // Which of these did I already respond to? (one extra query, batched)
+    let myResponded = new Set<string>();
+    if (me && inArea.length > 0) {
+      const mine = await db
+        .select({ sosId: sosResponses.sosId })
+        .from(sosResponses)
+        .where(
+          and(
+            eq(sosResponses.userId, me),
+            inArray(
+              sosResponses.sosId,
+              inArea.map((r) => r.id),
+            ),
+          ),
+        );
+      myResponded = new Set(mine.map((r) => r.sosId));
+    }
+    const result = inArea.map((r) => ({
+      id: r.id,
+      lat: r.lat,
+      lng: r.lng,
+      address_text: r.addressText,
+      message: r.message,
+      reporter_name: r.reporterName,
+      created_at: r.createdAt,
+      distance_km: Math.round(haversineKm(lat, lng, r.lat, r.lng) * 10) / 10,
+      responders: responderMap.get(r.id) ?? [],
+      i_responded: myResponded.has(r.id),
+      mine: me === r.userId,
+    }));
+    res.json({ sos: result, count: result.length });
   } catch (e) {
     next(e);
   }
