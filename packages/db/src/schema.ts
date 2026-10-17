@@ -104,6 +104,7 @@ export const reports = pgTable(
     noActionCount: integer('no_action_count').notNull().default(0),
     // v12 report-system upgrade:
     followerCount: integer('follower_count').notNull().default(0),
+    viewCount: integer('view_count').notNull().default(0),
     shareCount: integer('share_count').notNull().default(0),
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).notNull().defaultNow(),
     // 7-day police-action deadline (set when জনতা যাচাইকৃত is reached).

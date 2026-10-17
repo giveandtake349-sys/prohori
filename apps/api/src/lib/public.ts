@@ -25,6 +25,7 @@ export const publicReportColumns = {
   communityVerifiedAt: reports.communityVerifiedAt,
   accusedName: reports.accusedName,
   followerCount: reports.followerCount,
+  viewCount: reports.viewCount,
   shareCount: reports.shareCount,
   lastActivityAt: reports.lastActivityAt,
   deadlineAt: reports.deadlineAt,

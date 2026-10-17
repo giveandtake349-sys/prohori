@@ -17,7 +17,7 @@ import {
 } from '../lib/public.js';
 import { sendToUserIds } from '../lib/notify.js';
 import { checkHotspotAlert } from './hotspots.js';
-import { reports, reportMedia, corroborations, actionClaims, actionClaimVotes, reportFollowers, statusHistory, districts } from 'db';
+import { reports, reportMedia, corroborations, actionClaims, actionClaimVotes, reportFollowers, statusHistory, districts, users } from 'db';
 
 export const reportsRouter = Router();
 
@@ -307,6 +307,18 @@ reportsRouter.get('/:trackingId', optionalAuth, async (req: Request, res: Respon
       res.status(404).json({ error: 'report not found' });
       return;
     }
+    // v17: reporter display name (only if not anonymous; never expose reporterId).
+    let reporterName: string | null = null;
+    if (!row.isAnonymous) {
+      const [rep] = await db
+        .select({ reporterId: reports.reporterId })
+        .from(reports)
+        .where(eq(reports.id, row.id));
+      if (rep?.reporterId) {
+        const [u] = await db.select({ name: users.name }).from(users).where(eq(users.id, rep.reporterId));
+        reporterName = u?.name ?? null;
+      }
+    }
     const media = await db
       .select({
         url: reportMedia.url,
@@ -363,7 +375,7 @@ reportsRouter.get('/:trackingId', optionalAuth, async (req: Request, res: Respon
       confirms: confirmsBy.get(c.id) ?? 0,
       disputes: disputesBy.get(c.id) ?? 0,
     }));
-    res.json({ report: { ...toPublicReport(row), following }, media, history, claims });
+    res.json({ report: { ...toPublicReport(row), following, reporterName }, media, history, claims });
   } catch (e) {
     next(e);
   }
@@ -700,6 +712,26 @@ reportsRouter.post('/:id/share', async (req: Request, res: Response, next: NextF
       .where(eq(reports.id, id))
       .returning({ shareCount: reports.shareCount });
     res.json({ share_count: updated?.shareCount ?? 0 });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// POST /api/reports/:id/view — public view counter (frontend dedups per session).
+reportsRouter.post('/:id/view', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = uuidParam(req, res, 'id');
+    if (!id) return;
+    const [updated] = await db
+      .update(reports)
+      .set({ viewCount: sql`${reports.viewCount} + 1` })
+      .where(eq(reports.id, id))
+      .returning({ viewCount: reports.viewCount });
+    if (!updated) {
+      res.status(404).json({ error: 'report not found' });
+      return;
+    }
+    res.json({ view_count: updated.viewCount });
   } catch (e) {
     next(e);
   }

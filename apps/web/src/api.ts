@@ -37,6 +37,8 @@ export interface FeedReport {
   followerCount?: number;
   shareCount?: number;
   following?: boolean;
+  viewCount?: number;
+  reporterName?: string | null;
   deadlineAt?: string | null;
   overdue?: boolean;
   escalationLevel?: 'thana' | 'sp' | 'dig' | string | null;
@@ -271,6 +273,10 @@ export function unfollowReport(reportId: string) {
 
 export function shareReport(reportId: string) {
   return post<{ share_count: number }>(`/api/reports/${encodeURIComponent(reportId)}/share`, {});
+}
+
+export function recordView(reportId: string) {
+  return post<{ view_count: number }>(`/api/reports/${encodeURIComponent(reportId)}/view`, {});
 }
 
 export function voteClaim(reportId: string, claimId: string, vote: 'confirm' | 'dispute') {
