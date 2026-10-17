@@ -1053,3 +1053,8 @@ a.card.score-row { border-radius: 12px; padding: 12px 14px; }
 .sh-cchip:active .sh-cc { border-color: #f5b301; }
 .sh-home-box { cursor: pointer; }
 .sh-home-fake { flex: 1; font-size: 14px; padding: 13px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); opacity: .65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* V20.2 — shield true full-bleed (no side gaps), chip active state */
+.sh-page.page { width: 100%; max-width: none; margin: 0; }
+.sh-cchip.on .sh-cc { border-color: #f5b301; color: #ffd34d; box-shadow: 0 0 12px #f5b30144; }
+.sh-cchip.on small { color: #ffd34d; }

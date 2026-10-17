@@ -16,11 +16,12 @@ import {
 
 type Tab = 'check' | 'radar' | 'shield' | 'watchdog';
 
-const SAMPLES: Record<string, string> = {
-  offer: 'অভিনন্দন! Jels Jewellery তে পার্ট-টাইম জব। দিনে ৫০০০ টাকা। Telegram: t.me/xxx — প্রথমে ছোট task, পরে ৯০টা order!',
-  number: "01312-345678 — 'আমি বিকাশ অফিসার, upobritti এসেছে, OTP দিন'",
-  app: 'QuickCash Loan — NID দিয়েই ৫০ হাজার টাকা লোন!',
-  shop: 'fb.com/dreamfashion.bd — Guess ব্যাগ ১২০০! অগ্রিম বিকাশ করুন',
+/** Chip hints — placeholder guidance per check type. */
+const CHIP_HINTS: Record<string, string> = {
+  offer: 'টেলিগ্রাম লিংক দাও…',
+  number: 'নাম্বার দাও…',
+  app: 'অ্যাপ লিংক দাও…',
+  shop: 'পেজ / সাইট লিংক দাও…',
 };
 
 /** Line icons (feather-style) matching the app's circle-box buttons — no emojis. */
@@ -113,6 +114,7 @@ function VerdictCard({ result, onReported }: { result: ShieldCheckResult; onRepo
 
 function CheckTab({ signedIn, initialInput }: { signedIn: boolean; initialInput?: string }) {
   const [input, setInput] = useState(initialInput ?? '');
+  const [hintType, setHintType] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ShieldCheckResult | null>(null);
   const [error, setError] = useState('');
@@ -136,12 +138,12 @@ function CheckTab({ signedIn, initialInput }: { signedIn: boolean; initialInput?
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="এখানে paste করো… (Telegram offer, phone number, app নাম, shop link)"
+          placeholder={hintType ? CHIP_HINTS[hintType] : 'এখানে paste করো… (Telegram offer, phone number, app নাম, shop link)'}
           rows={3}
         />
         <div className="sh-cchips">
           {(['offer', 'number', 'app', 'shop'] as const).map((k) => (
-            <button key={k} type="button" className="sh-cchip" onClick={() => setInput(SAMPLES[k])}>
+            <button key={k} type="button" className={`sh-cchip${hintType === k ? ' on' : ''}`} onClick={() => setHintType(k)}>
               <span className="sh-cc">{ICONS[k]}</span>
               <small>{k === 'offer' ? 'Offer' : k === 'number' ? 'Number' : k === 'app' ? 'App' : 'Shop'}</small>
             </button>
@@ -329,6 +331,8 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
 
 export default function ShieldPage({ signedIn, initialTab, initialInput }: { signedIn: boolean; initialTab?: Tab; initialInput?: string }) {
   const [tab, setTab] = useState<Tab>(initialTab ?? 'check');
+  // sync when navigating via #/shield?tab=... links (e.g. watchdog FAB)
+  useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
   return (
     <div className="page sh-page">
       <header className="sh-hero">
