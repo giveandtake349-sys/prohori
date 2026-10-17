@@ -177,11 +177,19 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
           )}
         </div>
       </div>
-      <div className="rfoot">
-        <a className="btn blue" href={`#/track/${encodeURIComponent(report.trackingId)}`}>বিস্তারিত</a>
+      <div className="rfoot circles">
+        <a className="rcbtn" href={`#/track/${encodeURIComponent(report.trackingId)}`}>
+          <span className="rcc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg></span>
+          <small>বিস্তারিত</small>
+        </a>
+        <a className="rcbtn gold" href={`#/case/${encodeURIComponent(report.trackingId)}`}>
+          <span className="rcc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6M16 13H8M16 17H8" /></svg></span>
+          <small>কেস ফাইল</small>
+        </a>
         {canAct && (
-          <button className={`btn ${stage === 0 ? 'yellow' : 'dark'}`} disabled={busy} onClick={() => void act(() => corroborateReport(report.id), 'আপনার corroboration নথিভুক্ত হয়েছে।')}>
-            ✓ নিশ্চিত করো
+          <button type="button" className="rcbtn" disabled={busy} onClick={() => void act(() => corroborateReport(report.id), 'আপনার corroboration নথিভুক্ত হয়েছে।')}>
+            <span className="rcc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg></span>
+            <small>নিশ্চিত করো</small>
           </button>
         )}
         <FollowButton
@@ -190,6 +198,7 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
           initialFollowing={report.following}
           initialCount={report.followerCount}
           signedIn={signedIn}
+          circle
         />
       </div>
       {canAct && (

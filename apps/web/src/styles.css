@@ -918,3 +918,12 @@ a.card.score-row { border-radius: 12px; padding: 12px 14px; }
 [data-theme="dark"] .modhub-hdr { background: var(--surface); border: 1px solid var(--line); }
 [data-theme="dark"] .modhub-hdr h1 { color: var(--ink); }
 [data-theme="dark"] .mtab.on { background: var(--yellow); border-color: var(--yellow); color: var(--on-yellow); }
+
+/* report card circle-box action buttons (radial/tourist-tab style) */
+.rfoot.circles { display: flex; justify-content: space-around; padding: 12px 8px; }
+.rcbtn { width: 64px; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; text-decoration: none; color: inherit; }
+.rcbtn .rcc { width: 46px; height: 46px; border-radius: 50%; background: var(--surface); border: 1.5px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--blue); box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.rcbtn .rcc svg { width: 22px; height: 22px; }
+.rcbtn small { font-size: 10px; font-weight: 700; color: var(--ink); text-align: center; line-height: 1.3; }
+.rcbtn.gold .rcc { background: var(--yellow); border-color: var(--yellow); color: var(--on-yellow); }
+.rcbtn:disabled { opacity: .5; cursor: default; }

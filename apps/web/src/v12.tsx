@@ -79,12 +79,14 @@ export function FollowButton({
   initialFollowing,
   initialCount,
   signedIn,
+  circle,
 }: {
   kind: 'report' | 'missing';
   id: string;
   initialFollowing?: boolean;
   initialCount?: number;
   signedIn?: boolean;
+  circle?: boolean;
 }) {
   const [following, setFollowing] = useState(!!initialFollowing);
   const [count, setCount] = useState(initialCount ?? 0);
@@ -126,6 +128,22 @@ export function FollowButton({
     }
   };
 
+  if (circle) {
+    return (
+      <button
+        type="button"
+        className="rcbtn"
+        onClick={() => void toggle()}
+        disabled={busy}
+        aria-pressed={following}
+      >
+        <span className="rcc">{following
+          ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+          : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 01-3.4 0" /></svg>}</span>
+        <small>{following ? 'ফলো ✓' : 'ফলো'}{count > 0 ? ` ${count}` : ''}</small>
+      </button>
+    );
+  }
   return (
     <button
       type="button"
