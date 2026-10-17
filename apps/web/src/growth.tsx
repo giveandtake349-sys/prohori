@@ -184,6 +184,9 @@ export function InvitePage() {
   };
   return (
     <div className="page">
+      <a className="back-arrow" href="#/" aria-label="ফিরে যাও" style={{ marginBottom: '12px' }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+      </a>
       <h1><GIcon d={ICONS.gift} /> বন্ধুকে আনো</h1>
       <p className="meta">তোমার link দিয়ে যে join করবে, তোমরা দুজনেই <b>প্রহরী badge</b> পাবে।</p>
       <div className="card invite-card">
@@ -213,6 +216,7 @@ export function InviteLanding({ code }: { code: string }) {
   }, [code]);
   return (
     <div className="page">
+      <a className="back-arrow" href="#/" aria-label="ফিরে যাও" style={{ marginBottom: '12px' }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg></a>
       <div className="card" style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 44, color: 'var(--yellow)' }}><GIcon d={ICONS.gift} size={44} /></div>
         {error ? <p className="state err">{error}</p> : (
@@ -251,6 +255,9 @@ export function IdeasPage({ signedIn }: { signedIn: boolean }) {
   };
   return (
     <div className="page">
+      <a className="back-arrow" href="#/" aria-label="ফিরে যাও" style={{ marginBottom: '12px' }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+      </a>
       <h1><GIcon d={ICONS.bulb} /> ফিচার চাও?</h1>
       <p className="meta">কোন ফিচার চাও লিখো — সবাই ভোট দিবে। বেশি ভোট পেলে আমরা বানাবো।</p>
       {signedIn && (
@@ -290,6 +297,9 @@ export function CampusPage({ signedIn }: { signedIn: boolean }) {
   }, [signedIn]);
   return (
     <div className="page">
+      <a className="back-arrow" href="#/" aria-label="ফিরে যাও" style={{ marginBottom: '12px' }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+      </a>
       <h1><GIcon d={ICONS.cap} /> Campus অগ্রদূত</h1>
       <p className="meta">তোমার ক্যাম্পাসের <b>অগ্রদূত</b> হও — badge পাও, campus team lead করো।</p>
       {signedIn && myStatus.status === 'pending' && (
@@ -371,6 +381,9 @@ export function AmbassadorApplyPage({ signedIn, userName, userPhone }: { signedI
 
   return (
     <div className="page">
+      <a className="back-arrow" href="#/" aria-label="ফিরে যাও" style={{ marginBottom: '12px' }}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+      </a>
       <h1><GIcon d={ICONS.cap} /> অগ্রদূত application</h1>
       <div className="card">
         <div className="field"><label>নাম</label><input value={name} onChange={(e) => setName(e.target.value)} /></div>
@@ -385,7 +398,8 @@ export function AmbassadorApplyPage({ signedIn, userName, userPhone }: { signedI
           </div>
         </div>
         <div className="field"><label><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg> Institution খুঁজো</label>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="যেমন: Dhaka University" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="যেমন: Dhaka University"
+            onFocus={(e) => { window.setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300); }} />
           {results.length > 0 && (
             <div className="search-results">
               {results.map((r) => (
@@ -421,7 +435,8 @@ export function AmbassadorReviewPage() {
   };
   return (
     <div className="page">
-      <h1><GIcon d={ICONS.cap} /> অগ্রঅগ্রদূত applications</h1>
+      <a className="back-arrow" href="#/" aria-label="ফিরে যাও" style={{ marginBottom: '12px' }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg></a>
+      <h1><GIcon d={ICONS.cap} /> অগ্রদূত applications</h1>
       <div className="seg">
         <button className={scope === 'pending' ? 'on' : ''} onClick={() => setScope('pending')}>Pending</button>
         <button className={scope === 'all' ? 'on' : ''} onClick={() => setScope('all')}>সব</button>
