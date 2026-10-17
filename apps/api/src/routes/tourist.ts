@@ -91,8 +91,8 @@ touristRouter.get('/spots/:id', async (req: Request, res: Response, next: NextFu
       .from(scamExamples)
       .where(
         or(
+          eq(scamExamples.destination, spot.district),
           ilike(scamExamples.destination, `%${spot.nameEn.split(' ')[0]}%`),
-          ilike(scamExamples.title, `%${spot.district}%`),
         ),
       )
       .limit(20);
@@ -108,52 +108,97 @@ touristRouter.get('/spots/:id', async (req: Request, res: Response, next: NextFu
   }
 });
 
+// Bangla -> English place names so "ঢাকা"/"কক্সবাজার" match the English DB strings.
+const BN_PLACE_MAP: Record<string, string> = {
+  'ঢাকা': 'Dhaka', 'কক্সবাজার': "Cox's Bazar", 'কক্স বাজার': "Cox's Bazar",
+  'চট্টগ্রাম': 'Chattogram', 'চাঁদপুর': 'Chandpur',
+  'সিলেট': 'Sylhet', 'বান্দরবান': 'Bandarban', 'রাঙামাটি': 'Rangamati',
+  'খাগড়াছড়ি': 'Khagrachhari', 'সাজেক': 'Sajek', 'কুয়াকাটা': 'Kuakata',
+  'বরিশাল': 'Barishal', 'খুলনা': 'Khulna', 'বাগেরহাট': 'Bagerhat',
+  'সাতক্ষীরা': 'Satkhira', 'রাজশাহী': 'Rajshahi', 'বগুড়া': 'Bogura',
+  'নওগাঁ': 'Naogaon', 'রংপুর': 'Rangpur', 'দিনাজপুর': 'Dinajpur',
+  'পঞ্চগড়': 'Panchagarh', 'ময়মনসিংহ': 'Mymensingh', 'শেরপুর': 'Sherpur',
+  'নেত্রকোনা': 'Netrokona', 'সুনামগঞ্জ': 'Sunamganj', 'মৌলভীবাজার': 'Moulvibazar',
+  'হবিগঞ্জ': 'Habiganj', 'পটুয়াখালী': 'Patuakhali', 'ভোলা': 'Bhola',
+  'কুমিল্লা': 'Cumilla', 'নোয়াখালী': 'Noakhali', 'টাঙ্গাইল': 'Tangail',
+  'গাজীপুর': 'Gazipur', 'নারায়ণগঞ্জ': 'Narayanganj',
+  'সেন্টমার্টিন': 'Saint Martin', 'টেকনাফ': 'Teknaf',
+  'জাফলং': 'Jaflong', 'রাতারগুল': 'Ratargul', 'সুন্দরবন': 'Sundarbans',
+};
+
+function expandTerm(term: string): string[] {
+  const t = term.trim();
+  const mapped = BN_PLACE_MAP[t];
+  return mapped && mapped !== t ? [t, mapped] : [t];
+}
+
+/** Districts of spots matching a term (nameEn/nameBn/district/division). */
+async function districtsForTerm(term: string): Promise<Set<string>> {
+  const set = new Set<string>();
+  for (const variant of expandTerm(term)) {
+    const q = `%${variant}%`;
+    const matched = await db
+      .select({ district: touristSpots.district })
+      .from(touristSpots)
+      .where(
+        or(
+          ilike(touristSpots.nameEn, q),
+          ilike(touristSpots.nameBn, q),
+          ilike(touristSpots.district, q),
+          ilike(touristSpots.division, q),
+        ),
+      )
+      .limit(20);
+    for (const m of matched) set.add(m.district);
+  }
+  return set;
+}
+
 // GET /api/tourist/check?from=&to=&category= — fair price check before paying
+// Two-tier: (1) direct routes containing BOTH from+to, then (2) prices relevant to
+// the DESTINATION (to term). Never shows unrelated destinations' prices.
 touristRouter.get('/check', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { from, to, category } = req.query as { from?: string; to?: string; category?: string };
-    const terms = [from, to].filter((x): x is string => !!x && x.trim().length > 0);
-    const conds = [];
-    if (terms.length) {
-      // Resolve each term through tourist_spots too (handles Bangla input like "লাবনী"
-      // which matches spot nameBn but not the English price strings) -> collect districts.
-      const districtSet = new Set<string>();
-      for (const term of terms) {
-        const q = `%${term.trim()}%`;
-        const matched = await db
-          .select({ district: touristSpots.district })
-          .from(touristSpots)
-          .where(
-            or(
-              ilike(touristSpots.nameEn, q),
-              ilike(touristSpots.nameBn, q),
-              ilike(touristSpots.district, q),
-            ),
-          )
-          .limit(20);
-        for (const m of matched) districtSet.add(m.district);
-      }
-      // Match ANY term against route, destination or district (forgiving: user types free text)
-      const perTerm = terms.map((term) => {
-        const q = `%${term.trim()}%`;
-        return or(
-          ilike(fairPrices.routeOrItem, q),
-          ilike(fairPrices.destination, q),
-          ilike(fairPrices.district, q),
-        );
-      });
-      if (districtSet.size) {
-        perTerm.push(or(...[...districtSet].map((d) => eq(fairPrices.district, d))));
-      }
-      conds.push(or(...perTerm));
+    const fromT = (from ?? '').trim();
+    const toT = (to ?? '').trim();
+    const catCond = category ? eq(fairPrices.category, category) : undefined;
+
+    // Tier 1: direct route matches (route mentions both ends)
+    let direct: (typeof fairPrices.$inferSelect)[] = [];
+    if (fromT && toT) {
+      const combos = [];
+      for (const fv of expandTerm(fromT))
+        for (const tv of expandTerm(toT))
+          combos.push(and(ilike(fairPrices.routeOrItem, `%${fv}%`), ilike(fairPrices.routeOrItem, `%${tv}%`)));
+      direct = await db
+        .select()
+        .from(fairPrices)
+        .where(catCond ? and(or(...combos), catCond) : or(...combos))
+        .limit(20);
     }
-    if (category) conds.push(eq(fairPrices.category, category));
-    const rows = await db
-      .select()
-      .from(fairPrices)
-      .where(conds.length ? and(...conds) : undefined)
-      .limit(20);
-    // Related scam examples for the destination
+
+    // Tier 2: destination-relevant prices (district/destination of the TO term, else the single term)
+    const destTerm = toT || fromT;
+    let related: (typeof fairPrices.$inferSelect)[] = [];
+    if (destTerm) {
+      const dOr = [];
+      for (const variant of expandTerm(destTerm)) {
+        const q = `%${variant}%`;
+        dOr.push(ilike(fairPrices.destination, q), ilike(fairPrices.district, q));
+      }
+      for (const d of await districtsForTerm(destTerm)) dOr.push(eq(fairPrices.district, d));
+      related = await db
+        .select()
+        .from(fairPrices)
+        .where(catCond ? and(or(...dOr), catCond) : or(...dOr))
+        .limit(20);
+    }
+
+    const seen = new Set(direct.map((r) => r.id));
+    const rows = [...direct, ...related.filter((r) => !seen.has(r.id))].slice(0, 25);
+
+    // Related scam examples for the destinations in the result
     const dests = [...new Set(rows.map((r) => r.destination))];
     const scams = dests.length
       ? await db.select().from(scamExamples).where(or(...dests.map((d) => eq(scamExamples.destination, d)))).limit(10)

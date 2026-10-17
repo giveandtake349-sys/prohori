@@ -138,6 +138,7 @@ export default function TouristPage({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="page">
+      <a className="back-arrow" href="#/" aria-label="ফিরে যাও" style={{ marginBottom: '12px' }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg></a>
       <div className="page-hero">
         <h1 style={{ margin: 0 }}>{t('nav_tourist')}</h1>
       </div>
