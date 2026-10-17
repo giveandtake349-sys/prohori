@@ -115,6 +115,24 @@ touristRouter.get('/check', async (req: Request, res: Response, next: NextFuncti
     const terms = [from, to].filter((x): x is string => !!x && x.trim().length > 0);
     const conds = [];
     if (terms.length) {
+      // Resolve each term through tourist_spots too (handles Bangla input like "লাবনী"
+      // which matches spot nameBn but not the English price strings) -> collect districts.
+      const districtSet = new Set<string>();
+      for (const term of terms) {
+        const q = `%${term.trim()}%`;
+        const matched = await db
+          .select({ district: touristSpots.district })
+          .from(touristSpots)
+          .where(
+            or(
+              ilike(touristSpots.nameEn, q),
+              ilike(touristSpots.nameBn, q),
+              ilike(touristSpots.district, q),
+            ),
+          )
+          .limit(20);
+        for (const m of matched) districtSet.add(m.district);
+      }
       // Match ANY term against route, destination or district (forgiving: user types free text)
       const perTerm = terms.map((term) => {
         const q = `%${term.trim()}%`;
@@ -124,6 +142,9 @@ touristRouter.get('/check', async (req: Request, res: Response, next: NextFuncti
           ilike(fairPrices.district, q),
         );
       });
+      if (districtSet.size) {
+        perTerm.push(or(...[...districtSet].map((d) => eq(fairPrices.district, d))));
+      }
       conds.push(or(...perTerm));
     }
     if (category) conds.push(eq(fairPrices.category, category));

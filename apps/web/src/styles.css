@@ -468,6 +468,13 @@ a.card.score-row { border-radius: 12px; padding: 12px 14px; }
 .ritem .rc svg { width: 20px; height: 20px; }
 .ritem small { font-size: 9px; font-weight: 700; color: var(--ink); text-align: center; line-height: 1.3; max-width: 64px; }
 .ritem.sos .rc { background: var(--yellow); border-color: var(--yellow); color: var(--on-yellow); }
+/* tourist tab buttons — same circle style as radial menu */
+.ttabs { display: flex; justify-content: space-around; margin-bottom: 14px; }
+.titem { width: 64px; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
+.titem .tc { width: 46px; height: 46px; border-radius: 50%; background: var(--surface); border: 1.5px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--blue); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.titem .tc svg { width: 22px; height: 22px; }
+.titem small { font-size: 10px; font-weight: 700; color: var(--ink); text-align: center; line-height: 1.3; }
+.titem.active .tc { background: var(--yellow); border-color: var(--yellow); color: var(--on-yellow); }
 /* image upload box (missing person form) */
 .upload-box { border: 2px dashed var(--line); border-radius: 12px; padding: 22px 14px; text-align: center; cursor: pointer; background: var(--surface2); display: block; }
 .upload-box svg { width: 32px; height: 32px; color: var(--blue); margin-bottom: 8px; }

@@ -125,21 +125,11 @@ export default function TouristPage({ signedIn }: { signedIn: boolean }) {
   return (
     <div className="page">
       <div className="page-hero">
-        <h1 style={{ margin: 0 }}>🧭 {t('nav_tourist')}</h1>
+        <h1 style={{ margin: 0 }}>{t('nav_tourist')}</h1>
       </div>
       <p className="meta">স্ক্যাম থেকে বাঁচো — যাওয়ার আগে সঠিক দাম জেনে নাও।</p>
 
-      <div className="button-row" style={{ marginBottom: 14 }}>
-        {(['home', 'browse', 'check', 'report'] as View[]).map((v) => (
-          <button
-            key={v}
-            className={`btn ${view === v || (v === 'home' && (view === 'journey' || view === 'spot')) ? 'yellow' : ''}`}
-            onClick={() => setView(v)}
-          >
-            {v === 'home' ? '🏠 যাত্রা' : v === 'browse' ? '📂 স্পট' : v === 'check' ? '💰 দাম চেক' : '🚨 রিপোর্ট'}
-          </button>
-        ))}
-      </div>
+      <TouristTabs view={view} setView={setView} />
 
       {view === 'home' && (
         <JourneySelect
@@ -187,6 +177,31 @@ export default function TouristPage({ signedIn }: { signedIn: boolean }) {
   );
 }
 
+const tabIconProps = {
+  viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+  strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
+} as const;
+
+function TouristTabs({ view, setView }: { view: View; setView: (v: View) => void }) {
+  const tabs: { v: View; label: string; icon: React.ReactNode }[] = [
+    { v: 'home', label: 'যাত্রা', icon: (<svg {...tabIconProps}><circle cx="5" cy="19" r="2" /><circle cx="19" cy="5" r="2" /><path d="M7 19h7a3 3 0 000-6H9a3 3 0 010-6h8" /></svg>) },
+    { v: 'browse', label: 'স্পট', icon: (<svg {...tabIconProps}><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14M15 6v14" /></svg>) },
+    { v: 'check', label: 'দাম চেক', icon: (<svg {...tabIconProps}><path d="M20 12l-8 8-9-9V4h7z" /><circle cx="7.5" cy="7.5" r="1.5" /></svg>) },
+    { v: 'report', label: 'রিপোর্ট', icon: (<svg {...tabIconProps}><path d="M12 3l10 18H2z" /><path d="M12 10v4M12 17.5h.01" /></svg>) },
+  ];
+  const active = (v: View) => view === v || (v === 'home' && (view === 'journey' || view === 'spot'));
+  return (
+    <div className="ttabs">
+      {tabs.map((tb) => (
+        <button key={tb.v} className={`titem${active(tb.v) ? ' active' : ''}`} onClick={() => setView(tb.v)}>
+          <span className="tc">{tb.icon}</span>
+          <small>{tb.label}</small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function JourneySelect(props: {
   spots: TouristSpot[]; search: string; setSearch: (s: string) => void;
   fromId: number | null; toId: number | null;
@@ -218,12 +233,12 @@ function JourneySelect(props: {
 
   return (
     <div className="card">
-      <h3>🗺️ নতুন যাত্রা</h3>
+      <h3>নতুন যাত্রা</h3>
       <button className="input" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setPicking('from')}>
-        🟢 কোথা থেকে? — <b>{fromSpot ? `${fromSpot.nameBn} (${fromSpot.district})` : 'select করো'}</b>
+        কোথা থেকে? — <b>{fromSpot ? `${fromSpot.nameBn} (${fromSpot.district})` : 'select করো'}</b>
       </button>
       <button className="input" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setPicking('to')}>
-        📍 কোথায় যাবে? — <b>{toSpot ? `${toSpot.nameBn} (${toSpot.district})` : 'select করো'}</b>
+        কোথায় যাবে? — <b>{toSpot ? `${toSpot.nameBn} (${toSpot.district})` : 'select করো'}</b>
       </button>
       {picking && (
         <div style={{ marginBottom: 10 }}>
@@ -392,7 +407,7 @@ function PriceCheck() {
 
   return (
     <div className="card">
-      <h3>💰 Pay করার আগে চেক</h3>
+      <h3>Pay করার আগে চেক</h3>
       <input className="input" placeholder="কোথা থেকে? (যেমন: বাস স্ট্যান্ড)" value={from} onChange={(e) => setFrom(e.target.value)} />
       <input className="input" placeholder="কোথায়? (যেমন: লাবনী বিচ)" value={to} onChange={(e) => setTo(e.target.value)} />
       <button className="btn yellow" onClick={check} disabled={loading} style={{ width: '100%' }}>
@@ -457,7 +472,7 @@ function ScamReportForm({ signedIn, spots }: { signedIn: boolean; spots: Tourist
 
   return (
     <div className="card">
-      <h3>🚨 স্ক্যাম রিপোর্ট (১ মিনিট)</h3>
+      <h3>স্ক্যাম রিপোর্ট (১ মিনিট)</h3>
       <input className="input" placeholder="জায়গা (যেমন: কলাতলী বিচ)" value={place} onChange={(e) => setPlace(e.target.value)} />
       <input
         className="input" placeholder="জেলা (যেমন: কক্সবাজার)" value={district}
