@@ -132,7 +132,9 @@ function expandTerm(term: string): string[] {
   return mapped && mapped !== t ? [t, mapped] : [t];
 }
 
-/** Districts of spots matching a term (nameEn/nameBn/district/division). */
+/** Districts of spots matching a term (nameEn/nameBn/district only).
+ * Division intentionally NOT matched: matching "Dhaka" to its division pulled
+ * every Dhaka-division district's prices into a plain Dhaka search. */
 async function districtsForTerm(term: string): Promise<Set<string>> {
   const set = new Set<string>();
   for (const variant of expandTerm(term)) {
@@ -145,7 +147,6 @@ async function districtsForTerm(term: string): Promise<Set<string>> {
           ilike(touristSpots.nameEn, q),
           ilike(touristSpots.nameBn, q),
           ilike(touristSpots.district, q),
-          ilike(touristSpots.division, q),
         ),
       )
       .limit(20);
