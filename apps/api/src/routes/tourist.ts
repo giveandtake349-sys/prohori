@@ -159,9 +159,10 @@ async function districtsForTerm(term: string): Promise<Set<string>> {
 // the DESTINATION (to term). Never shows unrelated destinations' prices.
 touristRouter.get('/check', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { from, to, category } = req.query as { from?: string; to?: string; category?: string };
+    const { from, to, category, direct: directParam } = req.query as { from?: string; to?: string; category?: string; direct?: string };
     const fromT = (from ?? '').trim();
     const toT = (to ?? '').trim();
+    const directOnly = directParam === '1';
     const catCond = category ? eq(fairPrices.category, category) : undefined;
 
     // Tier 1: direct route matches (route mentions both ends)
@@ -179,9 +180,10 @@ touristRouter.get('/check', async (req: Request, res: Response, next: NextFuncti
     }
 
     // Tier 2: destination-relevant prices (district/destination of the TO term, else the single term)
+    // Skipped entirely when ?direct=1 (highway segment: only true from→to routes)
     const destTerm = toT || fromT;
     let related: (typeof fairPrices.$inferSelect)[] = [];
-    if (destTerm) {
+    if (destTerm && !directOnly) {
       const dOr = [];
       for (const variant of expandTerm(destTerm)) {
         const q = `%${variant}%`;

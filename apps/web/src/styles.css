@@ -806,3 +806,49 @@ a.card.score-row { border-radius: 12px; padding: 12px 14px; }
 .risk-dot.high { background: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,.7); }
 .risk-dot.medium { background: #eab308; box-shadow: 0 0 8px rgba(234,179,8,.7); }
 .risk-dot.low { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.7); }
+
+/* ---- Tourist journey redesign (v19.6) ---- */
+.tj-route { background: #1a1d21; color: #fff; border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+.tj-ends { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tj-city { font-size: 17px; font-weight: 800; color: #fff; }
+.tj-city small { display: block; font-size: 11px; font-weight: 400; color: #9ca3af; margin-top: 2px; }
+.tj-arrow { font-size: 20px; color: var(--yellow); flex: none; }
+.tj-meta { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.tj-pill { font-size: 11.5px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.14); padding: 5px 10px; border-radius: 20px; color: #d1d5db; }
+.tj-pill b { color: var(--yellow); }
+.tj-tl { position: relative; margin: 4px 0 0 8px; padding-left: 26px; }
+.tj-tl::before { content: ''; position: absolute; left: 8px; top: 14px; bottom: 14px; width: 2px; background: var(--line); border-radius: 2px; }
+.tj-seg { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.tj-seg::before { content: ''; position: absolute; left: -24px; top: 18px; width: 14px; height: 14px; border-radius: 50%; background: var(--yellow); border: 3px solid var(--surface); box-shadow: 0 0 0 2px var(--yellow); }
+.tj-seg.mid::before { background: var(--blue); box-shadow: 0 0 0 2px var(--blue); }
+.tj-seg.end::before { background: var(--green); box-shadow: 0 0 0 2px var(--green); }
+.tj-seg-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.tj-seg-title { font-size: 15px; font-weight: 800; color: var(--ink); }
+.tj-seg-tag { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; background: rgba(var(--yellow-rgb),.16); color: var(--yellow); white-space: nowrap; }
+.tj-seg.mid .tj-seg-tag { background: rgba(var(--blue-rgb),.14); color: var(--blue); }
+.tj-seg.end .tj-seg-tag { background: rgba(var(--green-rgb),.14); color: var(--green); }
+.tj-seg-sub { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.tj-price-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.tj-nm { color: var(--ink); }
+.tj-pr { font-weight: 800; color: var(--green); white-space: nowrap; }
+.tj-more { font-size: 12.5px; color: var(--yellow); font-weight: 700; margin: 6px 0 0; cursor: pointer; }
+.tj-btn { display: block; width: 100%; text-align: center; background: var(--yellow); border: none; border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 800; color: var(--on-yellow); margin-top: 8px; cursor: pointer; font-family: inherit; }
+.tj-scam-h { font-size: 15px; font-weight: 800; margin: 18px 2px 10px; display: flex; align-items: center; gap: 6px; color: var(--ink); }
+.tj-n { background: var(--red); color: #fff; font-size: 11px; border-radius: 12px; padding: 2px 8px; }
+.tj-scam { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--red); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+.tj-scam .tj-t { font-size: 13.5px; font-weight: 700; line-height: 1.5; margin: 0 0 10px; color: var(--ink); }
+.tj-cmp { display: flex; gap: 8px; }
+.tj-box { flex: 1; border-radius: 10px; padding: 8px 10px; }
+.tj-box.ok { background: rgba(var(--green-rgb),.1); }
+.tj-box.bad { background: rgba(var(--red-rgb),.08); }
+.tj-lbl { font-size: 10.5px; color: var(--muted); margin-bottom: 2px; }
+.tj-val { font-size: 15px; font-weight: 800; }
+.tj-val.ok { color: var(--green); }
+.tj-val.bad { color: var(--red); }
+.tj-bar { height: 6px; border-radius: 4px; background: var(--line); margin-top: 10px; overflow: hidden; }
+.tj-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--green), var(--red)); }
+.tj-bar-lbl { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.tj-note { font-size: 11.5px; color: var(--muted); text-align: center; margin-top: 14px; }
+[data-theme="dark"] .tj-route { background: var(--surface); border: 1px solid var(--line); }
+[data-theme="dark"] .tj-city { color: var(--ink); }
+[data-theme="dark"] .tj-pill { color: var(--muted); }

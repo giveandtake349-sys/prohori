@@ -321,61 +321,121 @@ function JourneySelect(props: {
 function JourneyView({ fromSpot, toSpot, onOpenSpot }: {
   fromSpot: TouristSpot; toSpot: TouristSpot; onOpenSpot: (id: number) => void;
 }) {
-  const [segData, setSegData] = useState<{ prices: FairPrice[]; scams: ScamExample[] } | null>(null);
+  type Seg = { prices: FairPrice[]; scams: ScamExample[] } | null;
+  const [segStart, setSegStart] = useState<Seg>(null);
+  const [segRoad, setSegRoad] = useState<Seg>(null);
+  const [segEnd, setSegEnd] = useState<Seg>(null);
+  const [expanded, setExpanded] = useState<boolean[]>([false, false, false]);
+  const fd = fromSpot.district;
+  const td = toSpot.district;
   useEffect(() => {
-    apiGet<{ prices: FairPrice[]; scams: ScamExample[] }>(
-      `/api/tourist/check?from=${encodeURIComponent(fromSpot.district)}&to=${encodeURIComponent(toSpot.district)}`,
-    ).then(setSegData).catch(() => {});
-  }, [fromSpot, toSpot]);
+    setSegStart(null); setSegRoad(null); setSegEnd(null);
+    setExpanded([false, false, false]);
+    apiGet<Seg>(`/api/tourist/check?to=${encodeURIComponent(fd)}`).then(setSegStart).catch(() => {});
+    apiGet<Seg>(`/api/tourist/check?from=${encodeURIComponent(fd)}&to=${encodeURIComponent(td)}&direct=1`).then(setSegRoad).catch(() => {});
+    apiGet<Seg>(`/api/tourist/check?to=${encodeURIComponent(td)}`).then(setSegEnd).catch(() => {});
+  }, [fd, td]);
 
-  const segments = [
-    { icon: '🚌', title: `${fromSpot.nameBn} — রওনা`, sub: 'বাস কাউন্টার · টার্মিনাল' },
-    { icon: '🛣️', title: 'হাইওয়ে — যাত্রাবিরতি', sub: `${fromSpot.district} → ${toSpot.district} রোড` },
-    { icon: '📍', title: `${toSpot.nameBn} — গন্তব্য`, sub: `${toSpot.district} · লোকাল` },
+  const toggle = (i: number) => setExpanded((e) => e.map((v, j) => (j === i ? !v : v)));
+
+  const segDefs = [
+    { data: segStart, title: 'ধাপ ১ · রওনা', tag: fromSpot.nameBn, cls: '', sub: 'ঘাট / কাউন্টার থেকে যাত্রা শুরু' },
+    { data: segRoad, title: 'ধাপ ২ · হাইওয়ে', tag: 'রুট', cls: 'mid', sub: `${fd} → ${td} রোড` },
+    { data: segEnd, title: 'ধাপ ৩ · গন্তব্য', tag: toSpot.nameBn, cls: 'end', sub: 'পৌঁছে যেখানে খরচ হবে' },
   ];
+  const totalPrices = (segStart?.prices.length ?? 0) + (segRoad?.prices.length ?? 0) + (segEnd?.prices.length ?? 0);
+  const totalScams = segEnd?.scams.length ?? 0;
+
+  const scamLabel = (fair: number | null, scam: number | null) => {
+    if (!fair || !scam || fair <= 0 || scam <= fair) return null;
+    const r = scam / fair;
+    return r >= 1.5 ? `${Math.round(r)} গুণ বেশি!` : `+${Math.round((r - 1) * 100)}% বেশি`;
+  };
 
   return (
     <div>
-      <div className="card" style={{ textAlign: 'center', marginBottom: 12 }}>
-        <b style={{ fontSize: 16 }}>{fromSpot.nameBn} <span style={{ color: 'var(--yellow)' }}>⇨</span> {toSpot.nameBn}</b>
-        <p className="meta" style={{ margin: '6px 0 0' }}>{fromSpot.district} → {toSpot.district}</p>
-      </div>
-      {segments.map((sg, i) => (
-        <div className="card" key={i} style={{ marginBottom: 10 }}>
-          <b>{sg.icon} {sg.title}</b>
-          <p className="meta" style={{ margin: '4px 0 8px' }}>{sg.sub}</p>
-          {i === 2 ? (
-            toSpot.id > 0 ? (
-              <button className="btn" onClick={() => onOpenSpot(toSpot.id)}>📂 {toSpot.nameBn} এর সব তথ্য দেখো</button>
-            ) : (
-              <p className="meta" style={{ margin: 0 }}>💡 নিচে এই জেলার স্ক্যাম আর সঠিক দাম দেখো</p>
-            )
-          ) : (
-            <p className="meta" style={{ margin: 0 }}>
-              {segData ? `${segData.prices.length} দাম · ${segData.scams.length} স্ক্যাম রেকর্ড` : 'লোড হচ্ছে…'}
-            </p>
-          )}
+      <div className="tj-route">
+        <div className="tj-ends">
+          <div className="tj-city">{fromSpot.nameBn}<small>রওনা</small></div>
+          <div className="tj-arrow">⇨</div>
+          <div className="tj-city" style={{ textAlign: 'right' }}>{toSpot.nameBn}<small>গন্তব্য</small></div>
         </div>
-      ))}
-      {segData && segData.scams.length > 0 && (
-        <div className="card">
-          <h3>⚠️ এই রুটে জানা স্ক্যাম</h3>
-          {segData.scams.map((s) => (
-            <div key={s.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
-              <b style={{ fontSize: 13 }}>{s.title}</b>
-              {s.fairPriceBdt != null && s.scamPriceBdt != null && (
-                <p className="meta" style={{ margin: '4px 0 0' }}>
-                  সঠিক: <b style={{ color: 'var(--green)' }}>{priceFmt(s.fairPriceBdt, s.fairPriceBdt)}</b>
-                  {' '}· চায়: <b style={{ color: '#f87171' }}>{priceFmt(s.scamPriceBdt, s.scamPriceBdt)}</b>
-                </p>
+        <div className="tj-meta">
+          <span className="tj-pill"><b>3</b> ধাপ</span>
+          <span className="tj-pill"><b>{totalPrices}</b> সঠিক দাম</span>
+          <span className="tj-pill"><b>{totalScams}</b> স্ক্যাম এলার্ট</span>
+        </div>
+      </div>
+      <div className="tj-tl">
+        {segDefs.map((sg, i) => {
+          const list = sg.data?.prices ?? [];
+          const shown = expanded[i] ? list : list.slice(0, 3);
+          return (
+            <div className={`tj-seg ${sg.cls}`} key={i}>
+              <div className="tj-seg-head"><span className="tj-seg-title">{sg.title}</span><span className="tj-seg-tag">{sg.tag}</span></div>
+              <p className="tj-seg-sub">{sg.sub}</p>
+              {sg.data === null ? (
+                <p className="tj-seg-sub">লোড হচ্ছে…</p>
+              ) : list.length === 0 ? (
+                <p className="tj-seg-sub">এই ধাপের তথ্য এখনো নেই</p>
+              ) : (
+                <>
+                  {shown.map((pr) => (
+                    <div className="tj-price-row" key={pr.id}>
+                      <span className="tj-nm">{pr.routeOrItem}</span>
+                      <span className="tj-pr">{priceFmt(pr.fairMinBdt, pr.fairMaxBdt)}</span>
+                    </div>
+                  ))}
+                  {list.length > 3 && (
+                    <p className="tj-more" onClick={() => toggle(i)}>
+                      {expanded[i] ? 'কম দেখো ↑' : `+ আরো ${list.length - 3}টি দাম দেখো →`}
+                    </p>
+                  )}
+                </>
+              )}
+              {i === 2 && toSpot.id > 0 && (
+                <button className="tj-btn" onClick={() => onOpenSpot(toSpot.id)}>{toSpot.nameBn} এর সব তথ্য দেখো</button>
+              )}
+              {i === 2 && toSpot.id <= 0 && (
+                <p className="tj-seg-sub">নিচে এই জেলার স্ক্যাম আর সঠিক দাম দেখো</p>
               )}
             </div>
-          ))}
+          );
+        })}
+      </div>
+      {segEnd && segEnd.scams.length > 0 && (
+        <div>
+          <div className="tj-scam-h">স্ক্যাম এলার্ট <span className="tj-n">{segEnd.scams.length}</span></div>
+          {segEnd.scams.map((s) => {
+            const lbl = scamLabel(s.fairPriceBdt, s.scamPriceBdt);
+            const ratio = s.fairPriceBdt && s.scamPriceBdt && s.fairPriceBdt > 0 ? s.scamPriceBdt / s.fairPriceBdt : 1;
+            return (
+              <div className="tj-scam" key={s.id}>
+                <p className="tj-t">{s.title}</p>
+                {s.fairPriceBdt != null && s.scamPriceBdt != null && (
+                  <>
+                    <div className="tj-cmp">
+                      <div className="tj-box ok"><div className="tj-lbl">সঠিক দাম</div><div className="tj-val ok">{priceFmt(s.fairPriceBdt, s.fairPriceBdt)}</div></div>
+                      <div className="tj-box bad"><div className="tj-lbl">চায়</div><div className="tj-val bad">{priceFmt(s.scamPriceBdt, s.scamPriceBdt)}</div></div>
+                    </div>
+                    {lbl && (
+                      <>
+                        <div className="tj-bar"><div className="tj-fill" style={{ width: `${Math.min(100, Math.max(14, ratio * 10))}%` }} /></div>
+                        <div className="tj-bar-lbl"><span>সঠিক</span><span>{lbl}</span></div>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
+      <p className="tj-note">দামগুলো যাচাইকৃত ডাটাবেস থেকে · ভুল থাকলে রিপোর্ট করো</p>
     </div>
   );
 }
+
 
 function BrowseView({ divisions, spots, onOpenSpot }: {
   divisions: { division: string; spots: number }[];
