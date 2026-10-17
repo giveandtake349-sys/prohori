@@ -3,6 +3,7 @@ import {
   uuid,
   text,
   integer,
+  serial,
   boolean,
   doublePrecision,
   timestamp,
@@ -606,3 +607,81 @@ export type PetitionEvent = typeof petitionEvents.$inferSelect;
 export type ReportFollower = typeof reportFollowers.$inferSelect;
 export type MissingFollower = typeof missingFollowers.$inferSelect;
 export type ActionClaimVote = typeof actionClaimVotes.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Tourist Scam Radar — spots, fair prices, scam examples (seeded), user reports.
+// Tables tourist_spots / fair_prices / scam_examples are created by the seed
+// SQL; tourist_scam_reports by migration. Convention: NO RLS.
+// ---------------------------------------------------------------------------
+
+/** Tourist spots across all 64 districts (seeded, verified research). */
+export const touristSpots = pgTable(
+  'tourist_spots',
+  {
+    id: serial('id').primaryKey(),
+    nameEn: text('name_en').notNull(),
+    nameBn: text('name_bn').notNull(),
+    district: text('district').notNull(),
+    division: text('division').notNull(),
+    type: text('type').notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('tourist_spots_name_district_uniq').on(t.nameEn, t.district)],
+);
+
+/** Verified fair prices for tourist services (seeded, source-backed). */
+export const fairPrices = pgTable(
+  'fair_prices',
+  {
+    id: serial('id').primaryKey(),
+    destination: text('destination').notNull(),
+    district: text('district').notNull(),
+    category: text('category').notNull(),
+    routeOrItem: text('route_or_item').notNull(),
+    fairMinBdt: integer('fair_min_bdt').notNull(),
+    fairMaxBdt: integer('fair_max_bdt').notNull(),
+    source: text('source'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('fair_prices_dest_cat_item_uniq').on(t.destination, t.category, t.routeOrItem)],
+);
+
+/** Real scam examples: fair price vs what scammers charge (seeded). */
+export const scamExamples = pgTable(
+  'scam_examples',
+  {
+    id: serial('id').primaryKey(),
+    destination: text('destination').notNull(),
+    title: text('title').notNull(),
+    fairPriceBdt: integer('fair_price_bdt'),
+    scamPriceBdt: integer('scam_price_bdt'),
+    source: text('source'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('scam_examples_dest_title_uniq').on(t.destination, t.title)],
+);
+
+/** User-submitted tourist scam reports (moderated). */
+export const touristScamReports = pgTable(
+  'tourist_scam_reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    spotId: integer('spot_id').references(() => touristSpots.id),
+    placeName: text('place_name').notNull(),
+    district: text('district').notNull(),
+    scamType: text('scam_type').notNull(),
+    description: text('description').notNull(),
+    askedPriceBdt: integer('asked_price_bdt'),
+    fairPriceBdt: integer('fair_price_bdt'),
+    reporterId: uuid('reporter_id'),
+    status: text('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('tourist_scam_reports_district_idx').on(t.district)],
+);
+
+export type TouristSpot = typeof touristSpots.$inferSelect;
+export type FairPrice = typeof fairPrices.$inferSelect;
+export type ScamExample = typeof scamExamples.$inferSelect;
+export type TouristScamReport = typeof touristScamReports.$inferSelect;

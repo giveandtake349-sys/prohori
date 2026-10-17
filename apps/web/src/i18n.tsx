@@ -22,6 +22,7 @@ const STRINGS: Record<string, { bn: string; en: string }> = {
   nav_missing: { bn: 'নিখোঁজ', en: 'Missing' },
   nav_trends: { bn: 'ট্রেন্ড', en: 'Trends' },
   nav_hotspots: { bn: 'হটস্পট ম্যাপ', en: 'Hotspot map' },
+  nav_tourist: { bn: 'ট্যুরিস্ট', en: 'Tourist' },
   nav_moderate: { bn: 'মডারেশন', en: 'Moderation' },
   loading: { bn: 'লোড হচ্ছে…', en: 'Loading…' },
   back_home: { bn: '← হোম', en: '← Home' },
