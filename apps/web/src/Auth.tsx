@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { fetchProfile, saveProfile, registerPushToken, type AppProfile } from './api';
+import { fetchProfile, saveProfile, registerPushToken, applyAmbassador, type AppProfile } from './api';
 import { supabase } from './supabaseClient';
 import { getPushToken } from './lib/push';
-import { AmbassadorBadge } from './growth';
+import { AmbassadorForm, type AmbassadorFormData } from './growth';
 
 export interface AuthState {
   session: Session | null;
@@ -162,6 +162,9 @@ interface LoginPageProps {
 
 export function LoginPage(_props: LoginPageProps) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [tab, setTab] = useState<'user' | 'ambassador'>('user');
+  const [ambDone, setAmbDone] = useState(false);
+  const auth = useAuthState();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -188,6 +191,14 @@ export function LoginPage(_props: LoginPageProps) {
         if (authError) throw authError;
         if (data.session) {
           setNotice('Account তৈরি হয়েছে। এখন profile সম্পূর্ণ করুন।');
+          const pending = window.localStorage.getItem('pending_ambassador');
+          if (pending) {
+            try {
+              await applyAmbassador(JSON.parse(pending) as AmbassadorFormData);
+              window.localStorage.removeItem('pending_ambassador');
+              setAmbDone(true);
+            } catch { /* keep pending for retry */ }
+          }
         } else {
           setNotice('আপনার email-এ verification link পাঠানো হয়েছে। Link-এ চাপ দিয়ে আবার এই site-এ ফিরুন।');
         }
@@ -229,39 +240,62 @@ export function LoginPage(_props: LoginPageProps) {
         </a>
         <div className="brand-mark">প্রহরী</div>
         <p className="auth-subtitle">জনতার চোখ — অপরাধ দেখলে চুপ নয়</p>
-        <h1>{mode === 'signin' ? 'আপনার account-এ ঢুকুন' : 'Prohori account খুলুন'}</h1>
-        <button className="google-btn" type="button" onClick={signInWithGoogle} disabled={busy}>
-          <span className="google-g">G</span> Google দিয়ে চালিয়ে যান
-        </button>
-        <div className="auth-divider"><span>অথবা email দিয়ে</span></div>
-        <form onSubmit={submit} className="stack-form">
-          {mode === 'signup' && (
-            <>
-              <label>নাম<input required minLength={2} maxLength={100} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>
-              <label>মোবাইল নম্বর<input required minLength={6} maxLength={24} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" inputMode="tel" placeholder="যেমন: 01XXXXXXXXX" /></label>
-            </>
-          )}
-          <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
-          <label>Password<input required minLength={8} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></label>
-          {error && <p className="form-error" role="alert">{error}</p>}
-          {notice && <p className="form-notice" role="status">{notice}</p>}
-          <button className="primary-btn" type="submit" disabled={busy}>
-            {busy ? 'অপেক্ষা করুন…' : mode === 'signin' ? 'Email দিয়ে login' : 'Account তৈরি করুন'}
-          </button>
-        </form>
-        <p className="auth-switch">
-          {mode === 'signin' ? 'নতুন account লাগবে?' : 'আগে থেকেই account আছে?'}{' '}
-          <button type="button" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setNotice(''); }}>
-            {mode === 'signin' ? 'Sign up' : 'Login'}
-          </button>
-        </p>
-        <div className="auth-divider"><span>অথবা</span></div>
-        <div className="amb-card">
-          <span className="amb-cap"><AmbassadorBadge level="university" size={52} /></span>
-          <h3>অগ্রদূত হিসেবে join করো</h3>
-          <p>ক্যাম্পাস অগ্রদূত হও — badge পাও,<br />নিজের team lead করো</p>
-          <a className="gold-btn" href="#/campus/apply">অগ্রদূত হও →</a>
+        <div className="auth-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === 'user'} className={tab === 'user' ? 'on' : ''} onClick={() => setTab('user')}>👤 User Signup</button>
+          <button type="button" role="tab" aria-selected={tab === 'ambassador'} className={tab === 'ambassador' ? 'on' : ''} onClick={() => setTab('ambassador')}>🎓 University Ambassador</button>
         </div>
+        {tab === 'user' ? (
+          <>
+            <h1>{mode === 'signin' ? 'আপনার account-এ ঢুকুন' : 'Prohori account খুলুন'}</h1>
+            <button className="google-btn" type="button" onClick={signInWithGoogle} disabled={busy}>
+              <span className="google-g">G</span> Google দিয়ে চালিয়ে যান
+            </button>
+            <div className="auth-divider"><span>অথবা email দিয়ে</span></div>
+            <form onSubmit={submit} className="stack-form">
+              {mode === 'signup' && (
+                <>
+                  <label>নাম<input required minLength={2} maxLength={100} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>
+                  <label>মোবাইল নম্বর<input required minLength={6} maxLength={24} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" inputMode="tel" placeholder="যেমন: 01XXXXXXXXX" /></label>
+                </>
+              )}
+              <label>Email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
+              <label>Password<input required minLength={8} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></label>
+              {error && <p className="form-error" role="alert">{error}</p>}
+              {notice && <p className="form-notice" role="status">{notice}</p>}
+              <button className="primary-btn" type="submit" disabled={busy}>
+                {busy ? 'অপেক্ষা করুন…' : mode === 'signin' ? 'Email দিয়ে login' : 'Account তৈরি করুন'}
+              </button>
+            </form>
+            <p className="auth-switch">
+              {mode === 'signin' ? 'নতুন account লাগবে?' : 'আগে থেকেই account আছে?'}{' '}
+              <button type="button" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setNotice(''); }}>
+                {mode === 'signin' ? 'Sign up' : 'Login'}
+              </button>
+            </p>
+          </>
+        ) : (
+          <>
+            <h1>University Ambassador</h1>
+            <p className="auth-subtitle" style={{ marginBottom: '16px' }}>ক্যাম্পাস অগ্রদূত application</p>
+            {ambDone ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <div style={{ fontSize: 44 }}>🎉</div>
+                <h2 style={{ fontSize: 17, margin: '8px 0' }}>Application গেছে!</h2>
+                <p className="auth-subtitle">Admin approve করলে তুমি অগ্রদূত badge পাবে।</p>
+              </div>
+            ) : (
+              <AmbassadorForm compact initialName={auth.profile?.name ?? ''} initialPhone={auth.profile?.phone ?? ''} submitLabel="আবেদন করো →"
+                onSubmit={async (d) => {
+                  if (auth.session) { await applyAmbassador(d); setAmbDone(true); }
+                  else {
+                    window.localStorage.setItem('pending_ambassador', JSON.stringify(d));
+                    setTab('user'); setMode('signup');
+                    setNotice('আগে account খুলো — তারপর application auto-submit হবে।');
+                  }
+                }} />
+            )}
+          </>
+        )}
         <p className="auth-privacy">আপনার account দিয়ে report করা যাবে। Anonymous report-এ পরিচয় public-এ দেখানো হবে না।</p>
       </section>
     </main>

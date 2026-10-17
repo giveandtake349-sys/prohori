@@ -328,16 +328,22 @@ export function CampusPage({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-export function AmbassadorApplyPage({ signedIn, userName, userPhone }: { signedIn: boolean; userName: string; userPhone: string }) {
-  const [name, setName] = useState(userName);
-  const [phone, setPhone] = useState(userPhone);
+
+export interface AmbassadorFormData { name: string; phone: string; level: 'university' | 'college' | 'school'; institutionId?: string; institutionName: string; reason?: string; }
+
+export function AmbassadorForm({ initialName, initialPhone, submitLabel, compact, onSubmit }: {
+  initialName: string; initialPhone: string; submitLabel: string; compact?: boolean;
+  onSubmit: (data: AmbassadorFormData) => Promise<void>;
+}) {
+  const [name, setName] = useState(initialName);
+  const [phone, setPhone] = useState(initialPhone);
   const [level, setLevel] = useState<'university' | 'college' | 'school'>('university');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Institution[]>([]);
   const [picked, setPicked] = useState<Institution | null>(null);
   const [customName, setCustomName] = useState('');
   const [reason, setReason] = useState('');
-  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -348,25 +354,89 @@ export function AmbassadorApplyPage({ signedIn, userName, userPhone }: { signedI
     return () => window.clearTimeout(t);
   }, [query, level]);
 
-  if (!signedIn) {
-    window.location.hash = '#/login';
-    return <div className="page"><p className="state">Login page-এ নিয়ে যাওয়া হচ্ছে…</p></div>;
-  }
-
   const submit = async () => {
     setError('');
     const institutionName = picked ? picked.name : customName.trim();
     if (!name.trim() || !phone.trim() || !institutionName) { setError('নাম, ফোন আর institution দাও'); return; }
+    setBusy(true);
     try {
-      await applyAmbassador({
-        name: name.trim(), phone: phone.trim(),
-        institutionId: picked?.id, institutionName, level, reason: reason.trim() || undefined,
-      });
-      setDone(true);
+      await onSubmit({ name: name.trim(), phone: phone.trim(), level, institutionId: picked?.id, institutionName, reason: reason.trim() || undefined });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'জমা দেওয়া যায়নি');
-    }
+    } finally { setBusy(false); }
   };
+
+  const levelBtns = (['university', 'college', 'school'] as const).map((l) => (
+    <button key={l} type="button" className={(level === l ? 'on' : '') + (compact ? ' pill' : '')} onClick={() => { setLevel(l); setPicked(null); setQuery(''); }}>
+      {l === 'university' ? 'University' : l === 'college' ? 'College' : 'School'}
+    </button>
+  ));
+
+  if (compact) {
+    return (
+      <div>
+        <input className="fld" value={name} onChange={(e) => setName(e.target.value)} placeholder="নাম" />
+        <input className="fld" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="মোবাইল নম্বর" inputMode="tel" />
+        <div className="seg pill-seg">{levelBtns}</div>
+        <input className="fld" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="প্রতিষ্ঠান খুঁজো…"
+          onFocus={(e) => { window.setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300); }} />
+        {results.length > 0 && (
+          <div className="search-results">
+            {results.map((r) => (
+              <div key={r.id} className={picked?.id === r.id ? 'sel' : ''} onClick={() => setPicked(r)}>
+                {picked?.id === r.id ? '✓ ' : ''}{r.name} <span className="meta">· {r.district}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {query.trim().length >= 2 && results.length === 0 && (
+          <input className="fld" style={{ marginTop: 8 }} value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="নাম লিখো (list-এ না থাকলে)" />
+        )}
+        {picked && <p className="meta ok">✓ {picked.name}</p>}
+        {error && <p className="state err">{error}</p>}
+        <button className="gold-btn" onClick={submit} disabled={busy}>{busy ? 'অপেক্ষা…' : submitLabel}</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="field"><label>নাম</label><input value={name} onChange={(e) => setName(e.target.value)} /></div>
+      <div className="field"><label>ফোন</label><input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+      <div className="field"><label>Level</label><div className="seg">{levelBtns}</div></div>
+      <div className="field"><label><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg> Institution খুঁজো</label>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="যেমন: Dhaka University"
+          onFocus={(e) => { window.setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300); }} />
+        {results.length > 0 && (
+          <div className="search-results">
+            {results.map((r) => (
+              <div key={r.id} className={picked?.id === r.id ? 'sel' : ''} onClick={() => setPicked(r)}>
+                {picked?.id === r.id ? '✓ ' : ''}{r.name} <span className="meta">· {r.district}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {query.trim().length >= 2 && results.length === 0 && (
+          <input style={{ marginTop: 8 }} value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="নাম লিখো (list-এ না থাকলে)" />
+        )}
+      </div>
+      {picked && <p className="meta ok">✓ {picked.name}</p>}
+      <div className="field"><label>কেন অগ্রদূত হতে চাও? (optional)</label>
+        <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
+      </div>
+      {error && <p className="state err">{error}</p>}
+      <button className="btn yellow" onClick={submit} disabled={busy}>{busy ? 'অপেক্ষা…' : submitLabel}</button>
+    </div>
+  );
+}
+
+export function AmbassadorApplyPage({ signedIn, userName, userPhone }: { signedIn: boolean; userName: string; userPhone: string }) {
+  const [done, setDone] = useState(false);
+
+  if (!signedIn) {
+    window.location.hash = '#/login';
+    return <div className="page"><p className="state">Login page-এ নিয়ে যাওয়া হচ্ছে…</p></div>;
+  }
 
   if (done) {
     return (
@@ -386,39 +456,8 @@ export function AmbassadorApplyPage({ signedIn, userName, userPhone }: { signedI
       </a>
       <h1><GIcon d={ICONS.cap} /> অগ্রদূত application</h1>
       <div className="card">
-        <div className="field"><label>নাম</label><input value={name} onChange={(e) => setName(e.target.value)} /></div>
-        <div className="field"><label>ফোন</label><input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-        <div className="field"><label>Level</label>
-          <div className="seg">
-            {(['university', 'college', 'school'] as const).map((l) => (
-              <button key={l} className={level === l ? 'on' : ''} onClick={() => { setLevel(l); setPicked(null); setQuery(''); }}>
-                {l === 'university' ? 'University' : l === 'college' ? 'College' : 'School'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="field"><label><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg> Institution খুঁজো</label>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="যেমন: Dhaka University"
-            onFocus={(e) => { window.setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300); }} />
-          {results.length > 0 && (
-            <div className="search-results">
-              {results.map((r) => (
-                <div key={r.id} className={picked?.id === r.id ? 'sel' : ''} onClick={() => setPicked(r)}>
-                  {picked?.id === r.id ? '✓ ' : ''}{r.name} <span className="meta">· {r.district}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {query.trim().length >= 2 && results.length === 0 && (
-            <input style={{ marginTop: 8 }} value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="নাম লিখো (list-এ না থাকলে)" />
-          )}
-        </div>
-        {picked && <p className="meta ok">✓ {picked.name}</p>}
-        <div className="field"><label>কেন অগ্রদূত হতে চাও? (optional)</label>
-          <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
-        </div>
-        {error && <p className="state err">{error}</p>}
-        <button className="btn yellow" onClick={submit}>Submit</button>
+        <AmbassadorForm initialName={userName} initialPhone={userPhone} submitLabel="Submit"
+          onSubmit={async (d) => { await applyAmbassador(d); setDone(true); }} />
       </div>
     </div>
   );
