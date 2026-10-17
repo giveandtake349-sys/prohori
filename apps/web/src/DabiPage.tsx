@@ -105,7 +105,7 @@ function PetitionCard({ p, signedIn, onSigned }: { p: Petition; signedIn: boolea
       {p.signature_count > 0 && (
         <div>
           <button className="fchip" onClick={toggleSigners} style={{ marginBottom: 4 }}>
-            {showSigners ? 'স্বাক্ষরকারী লুকাও' : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg> কারা স্বাক্ষর করেছে দেখো`}
+            {showSigners ? 'স্বাক্ষরকারী লুকাও' : (<><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg> কারা স্বাক্ষর করেছে দেখো</>)}
           </button>
           {showSigners && (
             <div className="signers-row">
