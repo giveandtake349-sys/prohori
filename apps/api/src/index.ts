@@ -20,6 +20,7 @@ import { pushRouter } from './routes/push.js';
 import { cronRouter } from './routes/cron.js';
 import { hotspotsRouter } from './routes/hotspots.js';
 import { touristRouter } from './routes/tourist.js';
+import { shieldRouter } from './routes/shield.js';
 import { growthRouter } from './routes/growth.js';
 
 const app = express();
@@ -51,6 +52,7 @@ app.use('/api/push', pushRouter);
 app.use('/api/cron', cronRouter);
 app.use('/api/hotspots', hotspotsRouter);
 app.use('/api/tourist', touristRouter);
+app.use('/api/shield', shieldRouter);
 app.use('/api/growth', growthRouter);
 
 app.use((_req: Request, res: Response) => {

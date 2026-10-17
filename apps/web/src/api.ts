@@ -906,3 +906,75 @@ export interface CaseStory { id: string; reportId: string; title: string; body: 
 export function fetchStories(): Promise<{ stories: CaseStory[] }> {
   return get('/api/growth/stories');
 }
+
+// ---------------------------------------------------------------------------
+// V20 Shield — anti-scam system
+// ---------------------------------------------------------------------------
+
+export type ShieldVerdict = 'fraud' | 'suspect' | 'blacklisted' | 'unknown' | 'clean';
+export type ShieldInputType = 'number' | 'shop' | 'app' | 'offer' | 'text';
+
+export interface ShieldCheckResult {
+  type: ShieldInputType;
+  verdict: ShieldVerdict;
+  title: string;
+  reasons: string[];
+  riskPct: number;
+  stats: { reports: number; confirms: number };
+  entityId: string | null;
+}
+
+export function checkShield(input: string): Promise<ShieldCheckResult> {
+  return post('/api/shield/check', { input });
+}
+
+export interface RadarAlert {
+  id: string;
+  type: string;
+  value?: string;
+  label: string | null;
+  status: string;
+  reportCount: number;
+  confirmCount: number;
+  verifiedAt: string | null;
+  reports: { id: string; title: string | null; details: string | null; createdAt: string }[];
+}
+
+export function fetchShieldRadar(): Promise<{ alerts: RadarAlert[] }> {
+  return get('/api/shield/radar');
+}
+
+export function reportScam(data: { type: 'number' | 'shop' | 'app' | 'link' | 'offer'; value: string; title: string; details?: string }) {
+  return post<{ report: unknown; entity: unknown }>('/api/shield/report', data);
+}
+
+export function confirmScam(entityId: string): Promise<{ confirmed: boolean; confirmCount: number }> {
+  return post(`/api/shield/confirm/${encodeURIComponent(entityId)}`, {});
+}
+
+export interface ShieldStats {
+  checks: number;
+  dodged: number;
+  savedEstimate: number;
+  streak: number;
+  lastCheckDate: string | null;
+}
+
+export interface LedgerItem {
+  verdict: string;
+  inputType: string;
+  savedEstimate: number;
+  createdAt: string;
+}
+
+export function fetchShieldStats(): Promise<{ stats: ShieldStats; ledger: LedgerItem[] }> {
+  return get('/api/shield/stats');
+}
+
+export function fetchWatchdog(): Promise<{ wall: RadarAlert[] }> {
+  return get('/api/shield/watchdog');
+}
+
+export function moderateScamReport(reportId: string, action: 'verify' | 'reject'): Promise<{ ok: boolean; status: string }> {
+  return post(`/api/shield/moderate/${encodeURIComponent(reportId)}`, { action });
+}

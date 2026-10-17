@@ -19,6 +19,7 @@ import CasePage from './CasePage';
 import HotspotPage from './HotspotPage';
 import TouristPage from './TouristPage';
 import SosPage from './SosPage';
+import ShieldPage from './ShieldPage';
 import { LangProvider, useLang, type Lang } from './i18n';
 import {
   AmbassadorApplyPage,
@@ -109,7 +110,7 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
     { href: '#/campus', label: 'Campus', icon: (<svg {...iconProps}><path d="M22 10L12 5 2 10l10 5 10-5z" /><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /><path d="M22 10v6" /></svg>) },
     { href: '#/invite', label: 'Invite', icon: (<svg {...iconProps}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>) },
     { href: '#/ideas', label: 'Idea', icon: (<svg {...iconProps}><path d="M9 18h6" /><path d="M10 22h4" /><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.4 1 2.3h6c0-.9.4-1.8 1-2.3A7 7 0 0012 2z" /></svg>) },
-    { href: '#/fraud', label: t('nav_fraud'), icon: (<svg {...iconProps}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M9 12l2 2 4-4" /></svg>) },
+    { href: '#/shield', label: '🛡️ শিল্ড', icon: (<svg {...iconProps}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M9 12l2 2 4-4" /></svg>) },
   ];
   // NOTE: #/dabi removed (dead route, deleted in v18) — do not re-add.
   const moreItems: { href: string; label: string; sub: string; sos?: boolean; icon: ReactNode }[] = [
@@ -295,6 +296,10 @@ function Shell() {
     page = <TeamDetailPage teamId={decodeURIComponent(routePath.slice('/teams/'.length))} profile={profile} />;
   } else if (routePath === '/fraud') {
     page = <FraudPage profile={profile} />;
+  } else if (routeBase === '/shield') {
+    const tab = routeQuery.get('tab');
+    const q = routeQuery.get('q') ?? undefined;
+    page = <ShieldPage signedIn={signedIn} initialTab={tab === 'radar' || tab === 'shield' || tab === 'watchdog' || tab === 'check' ? tab : undefined} initialInput={q} />;
   } else if (routePath === '/track') {
     page = <TrackSearchPage />;
   } else if (routePath.startsWith('/track/')) {

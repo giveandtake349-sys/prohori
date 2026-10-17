@@ -221,6 +221,22 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
   );
 }
 
+/** V20: compact shield check hero on home — links to full #/shield. */
+function ShieldHeroBox() {
+  const [input, setInput] = useState('');
+  return (
+    <div className="sh-home-box">
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Offer / number / app / shop link paste করো…"
+        aria-label="যাচাই করার জন্য paste করো"
+      />
+      <a className="sh-home-btn" href={`#/shield${input.trim() ? `?q=${encodeURIComponent(input.trim())}` : ''}`}>🛡️ যাচাই</a>
+    </div>
+  );
+}
+
 export function HomePage({ signedIn, initialCategory, profile }: { signedIn: boolean; initialCategory?: string; profile?: AppProfile | null }) {
   const [reports, setReports] = useState<FeedReport[]>([]);
   const [category, setCategory] = useState(initialCategory ?? '');
@@ -241,14 +257,15 @@ export function HomePage({ signedIn, initialCategory, profile }: { signedIn: boo
 
   return (
     <div className="page">
-      <header className="hero">
-        <h1>প্রহরী</h1>
-        <p>জনতার চোখ — অপরাধ দেখলে চুপ নয়</p>
+      <header className="hero sh-home-hero">
+        <p className="sh-kicker">ANTI-SCAM SHIELD</p>
+        <h1>ঠকার <span className="sh-gold">আগে</span> যাচাই করো</h1>
+        <p className="sh-sub">Offer, number, app, shop link — paste করো, ২ সেকেন্ডে verdict</p>
+        <ShieldHeroBox />
         {profile?.thanaName
           ? <p className="hero-intro"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg> তোমার এলাকা: <b>{profile.thanaName}</b> — {profile.name}, পাশে আছি!</p>
-          : <p className="hero-intro">নিরাপদে রিপোর্ট করুন, তথ্য যাচাই করুন, আর আপনার এলাকার মানুষের পাশে দাঁড়ান।</p>}
+          : null}
       </header>
-      <PublicCounter />
       <div className="quick-actions">
         <a className="quick-action" href="#/reports/new">＋ রিপোর্ট জমা দিন</a>
         <a className="quick-action" href="#/teams">পাশে আছি টিম</a>

@@ -10,8 +10,13 @@ import {
   numeric,
   uniqueIndex,
   index,
+  primaryKey,
   AnyPgColumn,
+  bigint,
+  date,
+  jsonb,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
 // Prohori — Phase 1 (core loop) schema.
@@ -685,3 +690,107 @@ export type TouristSpot = typeof touristSpots.$inferSelect;
 export type FairPrice = typeof fairPrices.$inferSelect;
 export type ScamExample = typeof scamExamples.$inferSelect;
 export type TouristScamReport = typeof touristScamReports.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// V20 Shield — anti-scam system.
+// ---------------------------------------------------------------------------
+
+/** Scam playbooks: keyword patterns used by the verdict engine. */
+export const scamPatterns = pgTable('scam_patterns', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  category: text('category').notNull(),
+  keywords: text('keywords').array().notNull().default(sql`'{}'`),
+  signals: jsonb('signals').notNull().default(sql`'{}'`),
+  description: text('description'),
+  severity: text('severity').notNull().default('medium'),
+  source: text('source'),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Known entities: numbers, shops, apps, links, offers. */
+export const scamEntities = pgTable(
+  'scam_entities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    type: text('type').notNull(), // number | shop | app | link | offer
+    value: text('value').notNull(),
+    label: text('label'),
+    status: text('status').notNull().default('unknown'), // unknown | suspect | fraud | blacklisted | verified_clean
+    reportCount: integer('report_count').notNull().default(0),
+    confirmCount: integer('confirm_count').notNull().default(0),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    sourceNote: text('source_note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('scam_entities_value_idx').on(t.value),
+    index('scam_entities_type_status_idx').on(t.type, t.status),
+  ],
+);
+
+/** User-submitted scam reports (moderated). */
+export const scamReports = pgTable(
+  'scam_reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    entityId: uuid('entity_id').references(() => scamEntities.id),
+    reporterId: uuid('reporter_id').references(() => users.id),
+    category: text('category'),
+    title: text('title'),
+    details: text('details'),
+    status: text('status').notNull().default('pending'), // pending | verified | rejected
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('scam_reports_status_idx').on(t.status),
+    index('scam_reports_entity_idx').on(t.entityId),
+  ],
+);
+
+/** Every check logged — input hashed, never raw. */
+export const scamChecks = pgTable(
+  'scam_checks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id),
+    inputType: text('input_type').notNull(),
+    inputHash: text('input_hash').notNull(),
+    verdict: text('verdict').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('scam_checks_user_idx').on(t.userId)],
+);
+
+/** Per-user shield stats: Bachalam ledger + streak. */
+export const shieldStats = pgTable('shield_stats', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id),
+  checks: integer('checks').notNull().default(0),
+  dodged: integer('dodged').notNull().default(0),
+  savedEstimate: bigint('saved_estimate', { mode: 'number' }).notNull().default(0),
+  streak: integer('streak').notNull().default(0),
+  lastCheckDate: date('last_check_date'),
+});
+
+/** Confirm dedup: one confirm per user per entity. */
+export const scamConfirms = pgTable(
+  'scam_confirms',
+  {
+    entityId: uuid('entity_id')
+      .notNull()
+      .references(() => scamEntities.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.entityId, t.userId] })],
+);
+
+export type ScamPattern = typeof scamPatterns.$inferSelect;
+export type ScamEntity = typeof scamEntities.$inferSelect;
+export type ScamReport = typeof scamReports.$inferSelect;
+export type ShieldStat = typeof shieldStats.$inferSelect;
