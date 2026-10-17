@@ -106,6 +106,20 @@ export default function TouristPage({ signedIn }: { signedIn: boolean }) {
     }
     return m;
   }, [spots]);
+  const districtOptsAll = useMemo(() => {
+    const list: TouristSpot[] = [];
+    const seen = new Set<string>();
+    for (const sp of spots) {
+      if (!seen.has(sp.district)) {
+        seen.add(sp.district);
+        list.push({
+          id: -(list.length + 1), nameEn: sp.district, nameBn: sp.district,
+          district: sp.district, division: sp.division, type: 'district', description: null,
+        });
+      }
+    }
+    return list;
+  }, [spots]);
   const norm = (v: string) => v.toLowerCase().replace(/['`\u2019]/g, '').replace(/\s+/g, ' ').trim();
   const filtered = useMemo(() => {
     const q = norm(search);
@@ -134,6 +148,7 @@ export default function TouristPage({ signedIn }: { signedIn: boolean }) {
       {view === 'home' && (
         <JourneySelect
           spots={filtered}
+          districts={districtOptsAll}
           search={search}
           setSearch={setSearch}
           fromId={fromId}
@@ -141,7 +156,6 @@ export default function TouristPage({ signedIn }: { signedIn: boolean }) {
           setFromId={setFromId}
           setToId={setToId}
           spotById={spotById}
-          allSpots={spots}
           onStart={() => setView('journey')}
         />
       )}
@@ -163,7 +177,7 @@ export default function TouristPage({ signedIn }: { signedIn: boolean }) {
         />
       )}
 
-      {view === 'check' && <PriceCheck />}
+      {view === 'check' && <PriceCheck spots={spots} districts={districtOptsAll} />}
 
       {view === 'report' && <ScamReportForm signedIn={signedIn} spots={spots} />}
 
@@ -202,34 +216,79 @@ function TouristTabs({ view, setView }: { view: View; setView: (v: View) => void
   );
 }
 
+const normS = (v: string) => v.toLowerCase().replace(/['`\u2019]/g, '').replace(/\s+/g, ' ').trim();
+
+function SuggestRow({ title, sub, highlight, onSelect }: { title: string; sub: string; highlight?: boolean; onSelect: () => void }) {
+  return (
+    <div
+      onTouchEnd={(e) => { e.preventDefault(); onSelect(); }}
+      onClick={onSelect}
+      style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)', cursor: 'pointer', background: highlight ? 'rgba(234,179,8,.06)' : undefined }}
+    >
+      <b style={{ fontSize: 14 }}>{title}</b>{' '}
+      <span className="meta" style={{ margin: 0 }}>{sub}</span>
+    </div>
+  );
+}
+
+/** Text input with spot+district suggestions. Reliable tap on mobile (touchend). */
+function SuggestInput({ spots, districts, value, onChange, onPick, placeholder, autoFocus }: {
+  spots: TouristSpot[];
+  districts: TouristSpot[];
+  value: string;
+  onChange: (v: string) => void;
+  onPick: (s: TouristSpot) => void;
+  placeholder: string;
+  autoFocus?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const q = normS(value);
+  const dists = districts.filter((d) => !q || normS(d.district).includes(q)).slice(0, 6);
+  const matchSpots = spots.filter(
+    (sp) => !q || normS(sp.nameEn).includes(q) || normS(sp.nameBn).includes(q) || normS(sp.district).includes(q),
+  ).slice(0, 10);
+  const show = open && (dists.length > 0 || matchSpots.length > 0);
+
+  return (
+    <div style={{ position: 'relative', marginBottom: 10 }}>
+      <input
+        className="input"
+        style={{ marginBottom: 0 }}
+        placeholder={placeholder}
+        value={value}
+        autoFocus={autoFocus}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
+      />
+      {show && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, marginTop: 4, maxHeight: 230, overflowY: 'auto', boxShadow: '0 10px 28px rgba(0,0,0,.4)' }}>
+          {dists.map((d) => (
+            <SuggestRow key={'d' + d.id} title={d.district} sub={`\u099C\u09C7\u09B2\u09BE \u00B7 ${d.division}`} highlight onSelect={() => { onPick(d); setOpen(false); }} />
+          ))}
+          {matchSpots.map((sp) => (
+            <SuggestRow key={'s' + sp.id} title={sp.nameBn} sub={`${sp.district} \u00B7 ${sp.division}`} onSelect={() => { onPick(sp); setOpen(false); }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function JourneySelect(props: {
-  spots: TouristSpot[]; search: string; setSearch: (s: string) => void;
+  spots: TouristSpot[]; districts: TouristSpot[]; search: string; setSearch: (s: string) => void;
   fromId: number | null; toId: number | null;
   setFromId: (n: number | null) => void; setToId: (n: number | null) => void;
   spotById: Map<number, TouristSpot>; onStart: () => void;
-  allSpots: TouristSpot[];
 }) {
-  const { spots, search, setSearch, fromId, toId, setFromId, setToId, spotById, onStart, allSpots } = props;
+  const { spots, districts, search, setSearch, fromId, toId, setFromId, setToId, spotById, onStart } = props;
   const [picking, setPicking] = useState<'from' | 'to' | null>(null);
   const fromSpot = fromId != null ? spotById.get(fromId) : undefined;
   const toSpot = toId != null ? spotById.get(toId) : undefined;
-  // District-level options (synthetic, negative ids) so users can pick "Dhaka" / "Cox's Bazar" directly
-  const normD = (v: string) => v.toLowerCase().replace(/['`\u2019]/g, '');
-  const districtOpts = useMemo(() => {
-    const q = normD(search.trim());
-    const seen = new Map<string, TouristSpot>();
-    for (const sp of allSpots) {
-      if (!seen.has(sp.district)) {
-        seen.set(sp.district, {
-          id: -(seen.size + 1), nameEn: sp.district, nameBn: sp.district,
-          district: sp.district, division: sp.division, type: 'district', description: null,
-        });
-      }
-    }
-    const all = [...seen.values()];
-    if (!q) return all.slice(0, 8);
-    return all.filter((d) => normD(d.district).includes(q)).slice(0, 8);
-  }, [allSpots, search]);
+  const pickSpot = (sp: TouristSpot) => {
+    if (picking === 'from') setFromId(sp.id); else setToId(sp.id);
+    setPicking(null); setSearch('');
+  };
 
   return (
     <div className="card">
@@ -241,43 +300,15 @@ function JourneySelect(props: {
         কোথায় যাবে? — <b>{toSpot ? `${toSpot.nameBn} (${toSpot.district})` : 'select করো'}</b>
       </button>
       {picking && (
-        <div style={{ marginBottom: 10 }}>
-          <input
-            className="input"
-            placeholder="জায়গার নাম লিখো…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            autoFocus
-          />
-          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-            {districtOpts.map((d) => (
-              <div
-                key={d.id}
-                onClick={() => {
-                  if (picking === 'from') setFromId(d.id); else setToId(d.id);
-                  setPicking(null); setSearch('');
-                }}
-                style={{ padding: '9px 4px', borderBottom: '1px solid var(--line)', cursor: 'pointer', background: 'rgba(234,179,8,.05)' }}
-              >
-                <b style={{ fontSize: 14 }}>📍 {d.nameBn}</b>{' '}
-                <span className="meta" style={{ margin: 0 }}>জেলা · {d.division}</span>
-              </div>
-            ))}
-            {spots.map((s) => (
-              <div
-                key={s.id}
-                onClick={() => {
-                  if (picking === 'from') setFromId(s.id); else setToId(s.id);
-                  setPicking(null); setSearch('');
-                }}
-                style={{ padding: '9px 4px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}
-              >
-                <b style={{ fontSize: 14 }}>{s.nameBn}</b>{' '}
-                <span className="meta" style={{ margin: 0 }}>{s.district} · {s.division}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <SuggestInput
+          spots={spots}
+          districts={districts}
+          value={search}
+          onChange={setSearch}
+          onPick={pickSpot}
+          placeholder="জায়গার নাম লিখো…"
+          autoFocus
+        />
       )}
       <button className="btn yellow" disabled={!fromSpot || !toSpot} onClick={onStart} style={{ width: '100%' }}>
         যাত্রা শুরু করো →
@@ -388,7 +419,7 @@ function BrowseView({ divisions, spots, onOpenSpot }: {
   );
 }
 
-function PriceCheck() {
+function PriceCheck({ spots, districts }: { spots: TouristSpot[]; districts: TouristSpot[] }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [result, setResult] = useState<{ prices: FairPrice[]; scams: ScamExample[] } | null>(null);
@@ -408,8 +439,8 @@ function PriceCheck() {
   return (
     <div className="card">
       <h3>Pay করার আগে চেক</h3>
-      <input className="input" placeholder="কোথা থেকে? (যেমন: বাস স্ট্যান্ড)" value={from} onChange={(e) => setFrom(e.target.value)} />
-      <input className="input" placeholder="কোথায়? (যেমন: লাবনী বিচ)" value={to} onChange={(e) => setTo(e.target.value)} />
+      <SuggestInput spots={spots} districts={districts} value={from} onChange={setFrom} onPick={(sp) => setFrom(sp.nameBn)} placeholder="কোথা থেকে? (টাইপ করো…)" />
+      <SuggestInput spots={spots} districts={districts} value={to} onChange={setTo} onPick={(sp) => setTo(sp.nameBn)} placeholder="কোথায়? (যেমন: লাবনী বিচ)" />
       <button className="btn yellow" onClick={check} disabled={loading} style={{ width: '100%' }}>
         {loading ? 'খুঁজছি…' : 'সঠিক দাম দেখো'}
       </button>
