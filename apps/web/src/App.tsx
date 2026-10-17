@@ -20,6 +20,9 @@ import HotspotPage from './HotspotPage';
 import TouristPage from './TouristPage';
 import SosPage from './SosPage';
 import ShieldPage from './ShieldPage';
+import SharePage from './SharePage';
+import DevelopersPage from './DevelopersPage';
+import GuaranteePage from './GuaranteePage';
 import { LangProvider, useLang, type Lang } from './i18n';
 import {
   AmbassadorApplyPage,
@@ -300,6 +303,15 @@ function Shell() {
     const tab = routeQuery.get('tab');
     const q = routeQuery.get('q') ?? undefined;
     page = <ShieldPage signedIn={signedIn} initialTab={tab === 'radar' || tab === 'shield' || tab === 'watchdog' || tab === 'check' ? tab : undefined} initialInput={q} />;
+  } else if (routeBase === '/share') {
+    // BlackHole Dhapa 1A: PWA share_target receiver — ?text=&title=&url=
+    const shared = routeQuery.get('text') ?? routeQuery.get('title') ?? routeQuery.get('url') ?? '';
+    const src = routeQuery.get('title') && routeQuery.get('text') ? routeQuery.get('title')! : '';
+    page = <SharePage sharedText={shared} source={src} />;
+  } else if (routeBase === '/developers') {
+    page = <DevelopersPage />;
+  } else if (routeBase === '/guarantee') {
+    page = <GuaranteePage signedIn={signedIn} />;
   } else if (routePath === '/track') {
     page = <TrackSearchPage />;
   } else if (routePath.startsWith('/track/')) {
@@ -339,10 +351,11 @@ function Shell() {
   }
 
   const isShieldFull = routeBase === '/shield';
+  const isBhFull = routeBase === '/share' || routeBase === '/developers' || routeBase === '/guarantee';
 
   return (
     <div className="app-frame">
-      {!isShieldFull && (
+      {!isShieldFull && !isBhFull && (
       <nav className="topbar">
         <a className="topbar-brand" href="#/">
           <img src="/prohori-logo.webp" alt="প্রহরী" />
@@ -364,7 +377,7 @@ function Shell() {
       )}
       {page}
       {showTour && signedIn && <OnboardingTour onDone={() => setShowTour(false)} />}
-      {!isShieldFull && <footer className="site-footer">Prohori MVP • জরুরি বিপদে ৯৯৯-এ কল করুন।</footer>}
+      {!isShieldFull && !isBhFull && <footer className="site-footer">Prohori MVP • জরুরি বিপদে ৯৯৯-এ কল করুন। <a href="#/developers" className="foot-link">Developers</a> • <a href="#/guarantee" className="foot-link">Guarantee</a></footer>}
     </div>
   );
 }

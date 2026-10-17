@@ -794,3 +794,93 @@ export type ScamPattern = typeof scamPatterns.$inferSelect;
 export type ScamEntity = typeof scamEntities.$inferSelect;
 export type ScamReport = typeof scamReports.$inferSelect;
 export type ShieldStat = typeof shieldStats.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// BlackHole Dhapa 1-2-3: FB tag bot, Bank Trust API, Guarantee.
+// ---------------------------------------------------------------------------
+
+/** FB Tag Bot: processed comment dedupe (at-least-once webhook delivery). */
+export const fbProcessedComments = pgTable('fb_processed_comments', {
+  commentId: text('comment_id').primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Bank Trust API keys — only the sha256 hash is stored, never the raw key. */
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    org: text('org'),
+    keyHash: text('key_hash').notNull().unique(),
+    plan: text('plan').notNull().default('starter'), // starter | growth | bank
+    quotaMonthly: integer('quota_monthly').notNull().default(10000),
+    usedThisMonth: integer('used_this_month').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('api_keys_hash_idx').on(t.keyHash)],
+);
+
+/** Incoming API key requests from the #/developers page. */
+export const apiKeyRequests = pgTable('api_key_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  org: text('org'),
+  email: text('email').notNull(),
+  plan: text('plan').notNull().default('starter'),
+  note: text('note'),
+  status: text('status').notNull().default('pending'), // pending | approved | rejected
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Guarantee receipts: "verify kore thokle, taka ferot". */
+export const guaranteeReceipts = pgTable(
+  'guarantee_receipts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id),
+    checkId: uuid('check_id').references(() => scamChecks.id),
+    code: text('code').notNull().unique(), // PHR-XXXXXX
+    verdictSnapshot: jsonb('verdict_snapshot'),
+    maxAmount: integer('max_amount').notNull().default(10000),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    status: text('status').notNull().default('active'), // active | claimed | expired
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('guarantee_receipts_code_idx').on(t.code), index('guarantee_receipts_user_idx').on(t.userId)],
+);
+
+/** Guarantee claims: receipt + proof + GD → moderator review → payout. */
+export const guaranteeClaims = pgTable(
+  'guarantee_claims',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    receiptId: uuid('receipt_id').references(() => guaranteeReceipts.id),
+    userId: uuid('user_id').references(() => users.id),
+    amount: integer('amount').notNull(),
+    proofUrls: text('proof_urls').array().notNull().default(sql`'{}'`),
+    gdNumber: text('gd_number'),
+    status: text('status').notNull().default('pending'), // pending | approved | rejected
+    reviewedBy: uuid('reviewed_by').references(() => users.id),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('guarantee_claims_status_idx').on(t.status), index('guarantee_claims_user_idx').on(t.userId)],
+);
+
+/** Guarantee fund ledger: public money trail (transparency). */
+export const guaranteeFund = pgTable('guarantee_fund', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  amount: integer('amount').notNull(),
+  kind: text('kind').notNull(), // credit | debit
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type FbProcessedComment = typeof fbProcessedComments.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type ApiKeyRequest = typeof apiKeyRequests.$inferSelect;
+export type GuaranteeReceipt = typeof guaranteeReceipts.$inferSelect;
+export type GuaranteeClaim = typeof guaranteeClaims.$inferSelect;
+export type GuaranteeFundEntry = typeof guaranteeFund.$inferSelect;

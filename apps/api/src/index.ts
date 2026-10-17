@@ -22,6 +22,9 @@ import { hotspotsRouter } from './routes/hotspots.js';
 import { touristRouter } from './routes/tourist.js';
 import { shieldRouter } from './routes/shield.js';
 import { growthRouter } from './routes/growth.js';
+import { fbRouter } from './routes/fb.js';
+import { trustRouter } from './routes/trust.js';
+import { guaranteeRouter } from './routes/guarantee.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -54,6 +57,9 @@ app.use('/api/hotspots', hotspotsRouter);
 app.use('/api/tourist', touristRouter);
 app.use('/api/shield', shieldRouter);
 app.use('/api/growth', growthRouter);
+app.use('/api/fb', fbRouter);
+app.use('/api/v1', trustRouter);
+app.use('/guarantee', guaranteeRouter);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'not found' });

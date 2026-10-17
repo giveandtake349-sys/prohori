@@ -1,18 +1,16 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { createHash } from 'node:crypto';
-import { and, desc, eq, gt, gte, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, inArray, or, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireModerator } from '../auth.js';
 import { validateBody } from '../validate.js';
+import { SAVED_AVG, detectType, buildVerdict, sha256, type InputType } from '../lib/shieldCheck.js';
 import {
-  scamPatterns,
   scamEntities,
   scamReports,
   scamChecks,
   shieldStats,
   scamConfirms,
-  type ScamEntity,
 } from 'db';
 
 export const shieldRouter = Router();
@@ -50,116 +48,9 @@ async function optionalAuth(req: Request, _res: Response, next: NextFunction): P
   next();
 }
 
-type InputType = 'number' | 'shop' | 'app' | 'offer' | 'text';
-
-/** Auto-detect what the user pasted. */
-function detectType(raw: string): { type: InputType; normalized: string } {
-  const input = raw.trim();
-  const lower = input.toLowerCase();
-  const digits = input.replace(/\D/g, '');
-  if (/^01[3-9]\d{8}$/.test(digits)) return { type: 'number', normalized: digits };
-  if (lower.includes('t.me') || lower.includes('telegram')) return { type: 'offer', normalized: input.slice(0, 500) };
-  if (lower.includes('fb.com') || lower.includes('facebook.com')) return { type: 'shop', normalized: input.slice(0, 300) };
-  if (lower.includes('play.google')) return { type: 'app', normalized: input.slice(0, 200) };
-  return { type: 'text', normalized: input.slice(0, 500) };
-}
-
-const SAVED_AVG: Record<string, number> = { offer: 45000, app: 30000, number: 9000, shop: 13700, text: 15000 };
-
-function sha256(s: string): string {
-  return createHash('sha256').update(s).digest('hex');
-}
-
-interface VerdictResult {
-  verdict: 'fraud' | 'suspect' | 'blacklisted' | 'unknown' | 'clean';
-  title: string;
-  reasons: string[];
-  stats: { reports: number; confirms: number };
-  entity: ScamEntity | null;
-  riskPct: number;
-}
-
-/** Score free text against active scam playbooks. */
-async function scoreText(text: string): Promise<{ pattern: string; riskPct: number; matched: string[] } | null> {
-  const patterns = await db.select().from(scamPatterns).where(eq(scamPatterns.active, true));
-  const lower = text.toLowerCase();
-  let best: { pattern: string; riskPct: number; matched: string[] } | null = null;
-  for (const p of patterns) {
-    const keywords = (p.keywords ?? []) as string[];
-    if (!keywords.length) continue;
-    const signals = (p.signals ?? {}) as Record<string, number>;
-    const matched = keywords.filter((k) => lower.includes(k.toLowerCase()));
-    if (!matched.length) continue;
-    const totalWeight = keywords.reduce((s, k) => s + (signals[k.toLowerCase()] ?? 10), 0);
-    const hitWeight = matched.reduce((s, k) => s + (signals[k.toLowerCase()] ?? 10), 0);
-    const riskPct = Math.min(99, Math.round((hitWeight / totalWeight) * 100));
-    if (!best || riskPct > best.riskPct) best = { pattern: p.name, riskPct, matched };
-  }
-  return best;
-}
-
-async function buildVerdict(type: InputType, normalized: string): Promise<VerdictResult> {
-  // 1) Entity lookup for number/shop/app
-  if (type === 'number' || type === 'shop' || type === 'app') {
-    const like = `%${normalized.slice(0, 60)}%`;
-    const rows = await db
-      .select()
-      .from(scamEntities)
-      .where(and(eq(scamEntities.type, type), or(eq(scamEntities.value, normalized), ilike(scamEntities.value, like))))
-      .limit(1);
-    const entity = rows[0] ?? null;
-    if (entity) {
-      const stats = { reports: entity.reportCount ?? 0, confirms: entity.confirmCount ?? 0 };
-      if (entity.status === 'fraud')
-        return { verdict: 'fraud', title: entity.label ?? 'Fraud', reasons: [`${stats.reports} টা verified রিপোর্ট`, entity.label ?? ''], stats, entity, riskPct: 95 };
-      if (entity.status === 'blacklisted')
-        return { verdict: 'blacklisted', title: entity.label ?? 'Blacklisted', reasons: ['কর্তৃপক্ষের blacklist এ আছে'], stats, entity, riskPct: 99 };
-      if (entity.status === 'suspect')
-        return { verdict: 'suspect', title: entity.label ?? 'সন্দেহজনক', reasons: [`${stats.reports} টা রিপোর্ট — যাচাই চলছে`], stats, entity, riskPct: 55 };
-      if (entity.status === 'verified_clean')
-        return { verdict: 'clean', title: entity.label ?? 'যাচাইকৃত', reasons: ['কোনো fraud রিপোর্ট নাই'], stats, entity, riskPct: 5 };
-    }
-    return {
-      verdict: 'unknown',
-      title: 'এখনো রিপোর্ট হয়নি',
-      reasons: ['এই database এ কোনো রিপোর্ট নাই — "নিরাপদ" বলা যাচ্ছে না, সতর্ক থাকো'],
-      stats: { reports: 0, confirms: 0 },
-      entity,
-      riskPct: 10,
-    };
-  }
-  // 2) Text/offer: pattern scoring
-  const scored = await scoreText(normalized);
-  if (scored) {
-    const { riskPct, matched, pattern } = scored;
-    if (riskPct >= 60)
-      return {
-        verdict: 'fraud',
-        title: 'Scam pattern match',
-        reasons: [`"${pattern}" playbook এর সাথে মিলেছে`, `মিলেছে: ${matched.join(', ')}`],
-        stats: { reports: 0, confirms: 0 },
-        entity: null,
-        riskPct,
-      };
-    if (riskPct >= 30)
-      return {
-        verdict: 'suspect',
-        title: 'সন্দেহজনক লক্ষণ',
-        reasons: [`আংশিক মিল: ${matched.join(', ')}`, 'টাকা পাঠানোর আগে আরো যাচাই করো'],
-        stats: { reports: 0, confirms: 0 },
-        entity: null,
-        riskPct,
-      };
-  }
-  return {
-    verdict: 'unknown',
-    title: 'চেনা pattern মিলেনি',
-    reasons: ['known scam playbook এর সাথে মিলে নাই — তবু সতর্ক থাকো'],
-    stats: { reports: 0, confirms: 0 },
-    entity: null,
-    riskPct: 10,
-  };
-}
+// NOTE: detectType / scoreText / buildVerdict / sha256 / SAVED_AVG live in
+// ../lib/shieldCheck.ts (shared with /api/v1 + /api/fb). This file only keeps
+// the optional-auth helper + stats bookkeeping.
 
 async function touchStats(userId: string, type: InputType, verdict: string): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
@@ -202,15 +93,20 @@ shieldRouter.post(
       const { type, normalized } = detectType(input);
       const v = await buildVerdict(type, normalized);
       const userId = req.authIdentity?.id ?? null;
-      // Log the check (hash only — never raw input)
-      await db.insert(scamChecks).values({
-        userId,
-        inputType: type,
-        inputHash: sha256(`${type}:${normalized}`),
-        verdict: v.verdict,
-      });
+      // Log the check (hash only — never raw input); return the check id so the
+      // guarantee flow can issue a Protected receipt for safe verdicts.
+      const [logged] = await db
+        .insert(scamChecks)
+        .values({
+          userId,
+          inputType: type,
+          inputHash: sha256(`${type}:${normalized}`),
+          verdict: v.verdict,
+        })
+        .returning({ id: scamChecks.id });
       if (userId) await touchStats(userId, type, v.verdict);
       res.json({
+        checkId: logged?.id ?? null,
         type,
         verdict: v.verdict,
         title: v.title,

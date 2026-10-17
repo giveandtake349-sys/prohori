@@ -22,8 +22,10 @@ import {
   joinTeam,
   leaveTeam,
   moderateReport,
+  pendingGuaranteeClaims,
   removeTeamMember,
   reviewAmbassadorApplication,
+  reviewGuaranteeClaim,
   reviewScamReport,
   reportFraudNumber,
   checkFraudNumber,
@@ -45,6 +47,7 @@ import {
   type FraudCheck,
   type ModerationStats,
   type NearbySummary,
+  type PendingClaimRow,
   type ReportDetail,
   type ReportHistory,
   type Team,
@@ -1501,7 +1504,7 @@ function AdminUsersTab() {
 }
 
 export function ModerationPage({ profile }: { profile: AppProfile | null }) {
-  const [tab, setTab] = useState<'reports' | 'ambassador' | 'scams' | 'users'>('reports');
+  const [tab, setTab] = useState<'reports' | 'ambassador' | 'scams' | 'guarantee' | 'users'>('reports');
   const [stats, setStats] = useState<ModerationStats | null>(null);
   const isAdmin = profile?.role === 'admin';
   const refreshStats = () => fetchModerationStats().then(setStats).catch(() => setStats(null));
@@ -1529,12 +1532,14 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
         <button className={tab === 'reports' ? 'mtab on' : 'mtab'} onClick={() => setTab('reports')}>রিপোর্ট{stats && stats.pending > 0 && <span className="mn">{stats.pending}</span>}</button>
         <button className={tab === 'ambassador' ? 'mtab on' : 'mtab'} onClick={() => setTab('ambassador')}>অগ্রদূত{stats && stats.ambassador_pending > 0 && <span className="mn">{stats.ambassador_pending}</span>}</button>
         <button className={tab === 'scams' ? 'mtab on' : 'mtab'} onClick={() => setTab('scams')}>স্ক্যাম{stats && stats.scam_pending > 0 && <span className="mn">{stats.scam_pending}</span>}</button>
+        <button className={tab === 'guarantee' ? 'mtab on' : 'mtab'} onClick={() => setTab('guarantee')}>🛡️ গ্যারান্টি</button>
         {isAdmin && <button className={tab === 'users' ? 'mtab on' : 'mtab'} onClick={() => setTab('users')}>ব্যবহারকারী</button>}
       </div>
       {!profile && <Message error>Login করে profile সম্পূর্ণ করুন।</Message>}
       {tab === 'reports' && <ModReportsTab onAction={refreshStats} />}
       {tab === 'ambassador' && <ModAmbassadorTab onAction={refreshStats} />}
       {tab === 'scams' && <ModScamTab onAction={refreshStats} />}
+      {tab === 'guarantee' && <ModGuaranteeTab onAction={refreshStats} />}
       {tab === 'users' && isAdmin && <AdminUsersTab />}
       <p className="modhub-note">প্রতিটা action সাথে সাথে কার্যকর হয়</p>
     </div>
@@ -1718,6 +1723,55 @@ function ModScamTab({ onAction }: { onAction: () => void }) {
           <div className="macts">
             <button className="mbtn ok" disabled={workingId === r.id} onClick={() => void review(r.id, 'approved')}>✓ Approve</button>
             <button className="mbtn no" disabled={workingId === r.id} onClick={() => void review(r.id, 'rejected')}>✕ Reject</button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+/** BlackHole Dhapa 3 — moderator queue for guarantee claims (approve = payout). */
+function ModGuaranteeTab({ onAction }: { onAction: () => void }) {
+  const [queue, setQueue] = useState<PendingClaimRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [workingId, setWorkingId] = useState('');
+  const [error, setError] = useState('');
+  const load = () => {
+    setLoading(true); setError('');
+    pendingGuaranteeClaims()
+      .then((d) => setQueue(d.queue))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'লোড হয়নি।'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+  const review = async (id: string, action: 'approve' | 'reject') => {
+    setWorkingId(id); setError('');
+    try { await reviewGuaranteeClaim(id, action); load(); onAction(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'সিদ্ধান্ত কার্যকর হয়নি।'); }
+    finally { setWorkingId(''); }
+  };
+  return (
+    <div>
+      <p className="meta">Approve করলে claim-এর টাকা fund থেকে <b>debit</b> হয়ে receipt <b>claimed</b> হবে। Public ledger-এ দেখাবে।</p>
+      {loading && <p className="state">লোড হচ্ছে…</p>}
+      {error && <Message error>{error}</Message>}
+      {!loading && !error && queue.length === 0 && <p className="state">অপেক্ষমাণ কোনো guarantee claim নেই।</p>}
+      {queue.map(({ claim, code, maxAmount }) => (
+        <article className="mcard gold" key={claim.id}>
+          <div className="mcard-top">
+            <span className="chip gold">🧾 {code ?? '—'}</span>
+            <span className="mcorr">৳{(claim.amount ?? 0).toLocaleString('en-US')} দাবি</span>
+          </div>
+          <h3>Claim #{claim.id.slice(0, 8)}</h3>
+          <p className="meta">GD: {claim.gdNumber ?? '—'} · Receipt limit: ৳{(maxAmount ?? 0).toLocaleString('en-US')} · {claim.createdAt ? new Date(claim.createdAt).toLocaleDateString('bn-BD') : ''}</p>
+          <div className="mproof">
+            {(claim.proofUrls ?? []).map((u, i) => (
+              <a key={i} href={u} target="_blank" rel="noreferrer" className="mlink">প্রমাণ {i + 1} ↗</a>
+            ))}
+          </div>
+          <div className="macts">
+            <button className="mbtn ok" disabled={workingId === claim.id} onClick={() => void review(claim.id, 'approve')}>✓ Approve (payout)</button>
+            <button className="mbtn no" disabled={workingId === claim.id} onClick={() => void review(claim.id, 'reject')}>✕ Reject</button>
           </div>
         </article>
       ))}

@@ -915,6 +915,7 @@ export type ShieldVerdict = 'fraud' | 'suspect' | 'blacklisted' | 'unknown' | 'c
 export type ShieldInputType = 'number' | 'shop' | 'app' | 'offer' | 'text';
 
 export interface ShieldCheckResult {
+  checkId: string | null;
   type: ShieldInputType;
   verdict: ShieldVerdict;
   title: string;
@@ -977,4 +978,78 @@ export function fetchWatchdog(): Promise<{ wall: RadarAlert[] }> {
 
 export function moderateScamReport(reportId: string, action: 'verify' | 'reject'): Promise<{ ok: boolean; status: string }> {
   return post(`/api/shield/moderate/${encodeURIComponent(reportId)}`, { action });
+}
+
+// ---------------------------------------------------------------------------
+// BlackHole Dhapa 2 — Bank Trust API (key requests)
+// ---------------------------------------------------------------------------
+
+export function requestApiKey(data: { name: string; org?: string; email: string; plan: 'starter' | 'growth' | 'bank'; note?: string }) {
+  return post<{ ok: boolean; id: string | null }>('/api/v1/request-key', data);
+}
+
+// ---------------------------------------------------------------------------
+// BlackHole Dhapa 3 — Guarantee
+// ---------------------------------------------------------------------------
+
+export interface GuaranteeClaim {
+  id: string;
+  receiptId: string | null;
+  userId: string | null;
+  amount: number;
+  proofUrls: string[];
+  gdNumber: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface GuaranteeReceipt {
+  id: string;
+  userId: string | null;
+  checkId: string | null;
+  code: string;
+  verdictSnapshot: unknown;
+  maxAmount: number | null;
+  expiresAt: string | null;
+  status: string;
+  createdAt: string;
+  claims: GuaranteeClaim[];
+}
+
+export interface FundInfo {
+  fundBalance: number;
+  totalPaidOut: number;
+  protectedActive: number;
+  claimsPaid: number;
+  ledger: { kind: string; amount: number; note: string | null; createdAt: string }[];
+}
+
+export function issueGuarantee(checkId: string): Promise<{ receipt: GuaranteeReceipt; reused?: boolean }> {
+  return post('/guarantee/issue', { check_id: checkId });
+}
+
+export function myGuarantees(): Promise<{ receipts: GuaranteeReceipt[] }> {
+  return get('/guarantee/my');
+}
+
+export function guaranteeFundInfo(): Promise<FundInfo> {
+  return get('/guarantee/fund');
+}
+
+export function fileGuaranteeClaim(data: { receipt_id: string; amount: number; proof_urls: string[]; gd_number: string }) {
+  return post<{ claim: GuaranteeClaim }>('/guarantee/claim', data);
+}
+
+export interface PendingClaimRow {
+  claim: GuaranteeClaim;
+  code: string | null;
+  maxAmount: number | null;
+}
+
+export function pendingGuaranteeClaims(): Promise<{ queue: PendingClaimRow[] }> {
+  return get('/guarantee/claims/pending');
+}
+
+export function reviewGuaranteeClaim(claimId: string, action: 'approve' | 'reject'): Promise<{ ok: boolean; action: string }> {
+  return post(`/guarantee/review/${encodeURIComponent(claimId)}`, { action });
 }

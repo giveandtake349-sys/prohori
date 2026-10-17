@@ -6,6 +6,7 @@ import {
   fetchWatchdog,
   confirmScam,
   reportScam,
+  issueGuarantee,
   type ShieldCheckResult,
   type RadarAlert,
   type ShieldStats,
@@ -57,10 +58,13 @@ const VERDICT_META: Record<string, { badge: string; cls: string; icon: string }>
   clean: { badge: '✅ পরিষ্কার', cls: 'green', icon: '✓' },
 };
 
-function VerdictCard({ result, onReported }: { result: ShieldCheckResult; onReported: () => void }) {
+function VerdictCard({ result, onReported, signedIn }: { result: ShieldCheckResult; onReported: () => void; signedIn: boolean }) {
   const meta = VERDICT_META[result.verdict] ?? VERDICT_META.unknown;
   const [reporting, setReporting] = useState(false);
   const [reportMsg, setReportMsg] = useState('');
+  const [protecting, setProtecting] = useState(false);
+  const [receiptCode, setReceiptCode] = useState('');
+  const isSafe = result.verdict === 'clean' || result.verdict === 'unknown';
   const doReport = async () => {
     setReporting(true);
     setReportMsg('');
@@ -101,6 +105,31 @@ function VerdictCard({ result, onReported }: { result: ShieldCheckResult; onRepo
         </div>
       )}
       <div className="sh-vactions">
+        {isSafe && !receiptCode && (
+          <button
+            type="button"
+            className="hot protect"
+            disabled={protecting}
+            title="Safe verdict — ৳১০,০০০ guarantee receipt নাও"
+            onClick={() => {
+              if (!signedIn) {
+                window.location.hash = '#/login';
+                return;
+              }
+              if (!result.checkId || protecting) return;
+              setProtecting(true);
+              issueGuarantee(result.checkId)
+                .then((d) => setReceiptCode(d.receipt.code))
+                .catch((e) => setReportMsg(e instanceof Error ? e.message : 'Receipt করা যায়নি।'))
+                .finally(() => setProtecting(false));
+            }}
+          >
+            {protecting ? '…' : '🛡️ Protected করো'}
+          </button>
+        )}
+        {receiptCode && (
+          <a className="hot receipt-link" href="#/guarantee" title={receiptCode}>🧾 {receiptCode}</a>
+        )}
         <button type="button" className="hot" onClick={() => {
           const text = `🛡️ Prohori Shield: "${result.title}" — ${meta.badge}. যাচাই করো: ${window.location.origin}${window.location.pathname}#/shield`;
           void navigator.clipboard?.writeText(text).then(() => setReportMsg('শেয়ার টেক্সট কপি হয়েছে।'));
@@ -155,7 +184,7 @@ function CheckTab({ signedIn, initialInput }: { signedIn: boolean; initialInput?
         {!signedIn && <p className="sh-note">Login করলে তোমার শিল্ড stats জমবে। <a href="#/login">Login করো</a></p>}
       </div>
       {error && <p className="sh-err">{error}</p>}
-      {result && <VerdictCard result={result} onReported={() => {}} />}
+      {result && <VerdictCard result={result} onReported={() => {}} signedIn={signedIn} />}
     </div>
   );
 }
