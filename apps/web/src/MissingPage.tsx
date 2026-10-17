@@ -86,7 +86,7 @@ function PersonCard({ p, signedIn, onChanged }: { p: MissingPerson; signedIn: bo
           {/* v15: "আমি দেখেছি" — sighting report → reporter gets push */}
           {!seenDone ? (
             <button className="fchip on" onClick={reportSeen} disabled={seenBusy} style={{ marginTop: 8 }}>
-              {seenBusy ? '…' : '👀 আমি দেখেছি — জানাও'}
+              {seenBusy ? '…' : 'আমি দেখেছি — জানাও'}
             </button>
           ) : (
             <p className="meta ok" style={{ marginTop: 8 }}>✓ জানানো হয়েছে — রিপোর্টারকে push গেছে</p>
@@ -258,7 +258,7 @@ export default function MissingPage({ signedIn }: { signedIn: boolean }) {
           {/* v15: map pin → 10km radius e AMBER alert jabe */}
           {!showSeenMap ? (
             <button type="button" className="fchip" onClick={() => setShowSeenMap(true)} style={{ marginTop: 8 }}>
-              📍 ম্যাপে শেষ দেখার জায়গা pin করো (ঐচ্ছিক)
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> ম্যাপে শেষ দেখার জায়গা pin করো (ঐচ্ছিক)
             </button>
           ) : (
             <div className="map-wrap" style={{ marginTop: 8 }}>

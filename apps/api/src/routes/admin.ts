@@ -7,6 +7,7 @@ import { validateBody, uuidParam } from '../validate.js';
 import { publicReportColumns, ALL_STATUSES, verificationTierOf } from '../lib/public.js';
 import { reports, statusHistory, alerts, moderationActions, users, reportFollowers } from 'db';
 import { sendToUserIds } from '../lib/notify.js';
+import { generateCaseStory } from './growth.js';
 
 export const adminRouter = Router();
 
@@ -114,6 +115,10 @@ adminRouter.patch(
       // Rejected reports are removed from the public feed and no longer alertable.
       if (to_status === 'rejected') {
         await db.delete(alerts).where(eq(alerts.reportId, id));
+      }
+      // v16: resolved → auto-generate the viral case story (fire-and-forget).
+      if (to_status === 'resolved') {
+        void generateCaseStory(id).catch((e) => console.error('[story] generate failed:', e));
       }
 
       // Moderation audit log — verify/reject. Who did what, when, and why.

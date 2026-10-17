@@ -13,6 +13,7 @@ export interface AppProfile {
   name: string;
   phone: string;
   role: string;
+  ambassadorLevel?: string | null;
 }
 
 declare global {
@@ -79,7 +80,7 @@ export async function requireProfile(req: Request, res: Response, next: NextFunc
   }
   try {
     const [profile] = await db
-      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role })
+      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role, ambassadorLevel: users.ambassadorLevel })
       .from(users)
       .where(eq(users.id, req.authIdentity.id));
     if (!profile) {
@@ -101,7 +102,7 @@ export async function requireModerator(req: Request, res: Response, next: NextFu
   }
   try {
     const [profile] = await db
-      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role })
+      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role, ambassadorLevel: users.ambassadorLevel })
       .from(users)
       .where(eq(users.id, req.authIdentity.id));
     if (!profile || (profile.role !== 'moderator' && profile.role !== 'admin')) {
@@ -124,7 +125,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   }
   try {
     const [profile] = await db
-      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role })
+      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role, ambassadorLevel: users.ambassadorLevel })
       .from(users)
       .where(eq(users.id, req.authIdentity.id));
     if (!profile || profile.role !== 'admin') {
@@ -178,7 +179,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       return;
     }
     const [profile] = await db
-      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role })
+      .select({ id: users.id, name: users.name, phone: users.phone, role: users.role, ambassadorLevel: users.ambassadorLevel })
       .from(users)
       .where(eq(users.id, body.id));
     if (profile) req.appProfile = profile;

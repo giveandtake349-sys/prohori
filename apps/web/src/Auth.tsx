@@ -3,6 +3,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { fetchProfile, saveProfile, registerPushToken, type AppProfile } from './api';
 import { supabase } from './supabaseClient';
 import { getPushToken } from './lib/push';
+import { AmbassadorBadge } from './growth';
 
 export interface AuthState {
   session: Session | null;
@@ -254,6 +255,13 @@ export function LoginPage(_props: LoginPageProps) {
             {mode === 'signin' ? 'Sign up' : 'Login'}
           </button>
         </p>
+        <div className="auth-divider"><span>অথবা</span></div>
+        <div className="amb-card">
+          <span className="amb-cap"><AmbassadorBadge level="university" size={52} /></span>
+          <h3>অগ্রদূত হিসেবে join করো</h3>
+          <p>ক্যাম্পাস অগ্রদূত হও — badge পাও,<br />নিজের team lead করো</p>
+          <a className="gold-btn" href="#/campus/apply">অগ্রদূত হও →</a>
+        </div>
         <p className="auth-privacy">আপনার account দিয়ে report করা যাবে। Anonymous report-এ পরিচয় public-এ দেখানো হবে না।</p>
       </section>
     </main>

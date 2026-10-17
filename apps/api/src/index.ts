@@ -19,6 +19,7 @@ import { sosRouter } from './routes/sos.js';
 import { pushRouter } from './routes/push.js';
 import { cronRouter } from './routes/cron.js';
 import { hotspotsRouter } from './routes/hotspots.js';
+import { growthRouter } from './routes/growth.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -48,6 +49,7 @@ app.use('/api/sos', sosRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/cron', cronRouter);
 app.use('/api/hotspots', hotspotsRouter);
+app.use('/api/growth', growthRouter);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'not found' });

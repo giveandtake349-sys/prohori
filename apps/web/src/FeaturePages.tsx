@@ -49,6 +49,7 @@ import {
 import { CATEGORY_BN, CATEGORY_KEYS, STATUS_BN, TIER_BN } from './labels';
 import MapPicker from './MapPicker';
 import ShareButtons from './share';
+import { PublicCounter, StoriesRail } from './growth';
 import { supabase } from './supabaseClient';
 import {
   ClaimVotes,
@@ -205,7 +206,7 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
   );
 }
 
-export function HomePage({ signedIn, initialCategory }: { signedIn: boolean; initialCategory?: string }) {
+export function HomePage({ signedIn, initialCategory, profile }: { signedIn: boolean; initialCategory?: string; profile?: AppProfile | null }) {
   const [reports, setReports] = useState<FeedReport[]>([]);
   const [category, setCategory] = useState(initialCategory ?? '');
   const [sort, setSort] = useState<FeedSort>('hot');
@@ -228,8 +229,11 @@ export function HomePage({ signedIn, initialCategory }: { signedIn: boolean; ini
       <header className="hero">
         <h1>প্রহরী</h1>
         <p>জনতার চোখ — অপরাধ দেখলে চুপ নয়</p>
-        <p className="hero-intro">নিরাপদে রিপোর্ট করুন, তথ্য যাচাই করুন, আর আপনার এলাকার মানুষের পাশে দাঁড়ান।</p>
+        {profile?.thanaName
+          ? <p className="hero-intro"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg> তোমার এলাকা: <b>{profile.thanaName}</b> — {profile.name}, পাশে আছি!</p>
+          : <p className="hero-intro">নিরাপদে রিপোর্ট করুন, তথ্য যাচাই করুন, আর আপনার এলাকার মানুষের পাশে দাঁড়ান।</p>}
       </header>
+      <PublicCounter />
       <div className="quick-actions">
         <a className="quick-action" href="#/reports/new">＋ রিপোর্ট জমা দিন</a>
         <a className="quick-action" href="#/teams">পাশে আছি টিম</a>
@@ -253,6 +257,7 @@ export function HomePage({ signedIn, initialCategory }: { signedIn: boolean; ini
       <div className="feed">
         {reports.map((report) => <ReportCard key={report.id} report={report} signedIn={signedIn} reload={reload} />)}
       </div>
+      <StoriesRail />
     </div>
   );
 }
@@ -489,7 +494,7 @@ function NearbyBox({ lat, lng }: { lat: number; lng: number }) {
   }
   return (
     <div className="warnbox">
-      ⚠️ এই এলাকায় গত ৩০ দিনে: {entries.map(([cat, n]) => `${CATEGORY_BN[cat] ?? cat} ${n}`).join(' • ')}
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 18h.01"/></svg> এই এলাকায় গত ৩০ দিনে: {entries.map(([cat, n]) => `${CATEGORY_BN[cat] ?? cat} ${n}`).join(' • ')}
     </div>
   );
 }
@@ -688,11 +693,11 @@ export function NewReportPage({ signedIn }: { signedIn: boolean }) {
                   title={listening ? 'বন্ধ করুন' : 'বলে লিখুন (বাংলা)'}
                   aria-label={listening ? 'ভয়েস ইনপুট বন্ধ করুন' : 'বাংলায় বলে বিবরণ লিখুন'}
                 >
-                  🎙️
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 19v3"/></svg>
                 </button>
               )}
             </div>
-            <span className="meta">{voiceSupported ? '— মাইকে চাপ দিয়ে বলেও লিখতে পারেন' : null}{listening ? ' 🎙️ শুনছি… বাংলায় বলুন' : null}</span>
+            <span className="meta">{voiceSupported ? '— মাইকে চাপ দিয়ে বলেও লিখতে পারেন' : null}{listening ? ' <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0M12 19v3"/></svg> শুনছি… বাংলায় বলুন' : null}</span>
           </label>
           {['dhorshon', 'khun', 'ghum'].includes(category) && <label>অভিযুক্তের নাম (ঐচ্ছিক)<input value={accusedName} onChange={(event) => setAccusedName(event.target.value)} maxLength={200} /><span className="meta">Officially verified না হওয়া পর্যন্ত এই নাম public-এ দেখানো হবে না।</span></label>}
           <div>
@@ -813,7 +818,7 @@ function TeamCard({ team }: { team: Team }) {
         <span className="team-type">{meta.emoji} {meta.bn}</span>
       </div>
       <p className="meta">{area || 'এলাকা উল্লেখ নেই'} • {team.member_count} জন volunteer</p>
-      {team.distance_km !== null && <p className="meta dist">📍 প্রায় {team.distance_km} কিমি দূরে</p>}
+      {team.distance_km !== null && <p className="meta dist"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> প্রায় {team.distance_km} কিমি দূরে</p>}
     </a>
   );
 }
@@ -1042,7 +1047,7 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
 
       <div className="teams-toolbar">
         <div className="searchbar">
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="🔍 টিমের নাম / এলাকা লিখো…" aria-label="টিম খুঁজুন" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="টিমের নাম / এলাকা লিখো…" aria-label="টিম খুঁজুন" />
         </div>
         <div className="typechips">
           <button className={`tchip${typeFilter === '' ? ' on' : ''}`} onClick={() => setTypeFilter('')}>সব</button>
@@ -1056,9 +1061,9 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
 
       {/* v15: 3-tab discovery — আমার এলাকা / আশেপাশে / সব টিম */}
       <div className="discover-tabs">
-        <button className={`dtab${discoverTab === 'area' ? ' on' : ''}`} onClick={() => setDiscoverTab('area')}>📍 আমার এলাকা</button>
-        <button className={`dtab${discoverTab === 'nearby' ? ' on' : ''}`} onClick={() => setDiscoverTab('nearby')}>🧭 আশেপাশে</button>
-        <button className={`dtab${discoverTab === 'all' ? ' on' : ''}`} onClick={() => setDiscoverTab('all')}>🌍 সব টিম</button>
+        <button className={`dtab${discoverTab === 'area' ? ' on' : ''}`} onClick={() => setDiscoverTab('area')}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> আমার এলাকা</button>
+        <button className={`dtab${discoverTab === 'nearby' ? ' on' : ''}`} onClick={() => setDiscoverTab('nearby')}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5l-1.5 4-4 1.5 1.5-4z"/></svg> আশেপাশে</button>
+        <button className={`dtab${discoverTab === 'all' ? ' on' : ''}`} onClick={() => setDiscoverTab('all')}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18"/></svg> সব টিম</button>
       </div>
       <div style={{ margin: '0 0 12px' }}>
         <button className="small-btn" onClick={() => { setShowCreate((v) => !v); setStep(1); }}>{showCreate ? 'ফর্ম বন্ধ' : '＋ নতুন টিম'}</button>
@@ -1067,12 +1072,12 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
       {discoverTab === 'area' && (
         <>
           <div className="section-heading">
-            <h2 className="sec">📍 আমার এলাকা{areaThanaName ? ` — ${areaThanaName}` : ''}</h2>
+            <h2 className="sec"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> আমার এলাকা{areaThanaName ? ` — ${areaThanaName}` : ''}</h2>
             <button className="small-btn" onClick={loadMyArea} disabled={areaLoading}>{areaLoading ? 'খুঁজছে…' : '↻ রিফ্রেশ'}</button>
           </div>
           {areaError && <Message error>{areaError}</Message>}
           {!areaError && areaLoading && <p className="state">তোমার এলাকার team খুঁজছে…</p>}
-          {!areaError && !areaLoading && areaTeams.length === 0 && <p className="state">তোমার থানায় এখনো কোনো team নেই — প্রথম team খুলে ফেলো! 👇</p>}
+          {!areaError && !areaLoading && areaTeams.length === 0 && <p className="state">তোমার থানায় এখনো কোনো team নেই — প্রথম team খুলে ফেলো! </p>}
           <div className="feed">{areaTeams.map((team) => <TeamCard key={team.id} team={team} />)}</div>
         </>
       )}
@@ -1080,7 +1085,7 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
       {discoverTab === 'nearby' && (
         <>
           <div className="section-heading">
-            <h2 className="sec">🧭 আশেপাশে (৮ কিমি)</h2>
+            <h2 className="sec"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5l-1.5 4-4 1.5 1.5-4z"/></svg> আশেপাশে (৮ কিমি)</h2>
             <button className="small-btn" onClick={loadNearby} disabled={nearbyLoading}>{nearbyLoading ? 'খুঁজছে…' : '↻ রিফ্রেশ'}</button>
           </div>
           {nearbyError && <Message error>{nearbyError}</Message>}
@@ -1093,7 +1098,7 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
       {discoverTab === 'all' && (
         <>
           <div className="section-heading">
-            <h2 className="sec">🌍 সব টিম</h2>
+            <h2 className="sec"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18"/></svg> সব টিম</h2>
           </div>
           {error && <Message error>{error}</Message>}
           {loading && <p className="state">লোড হচ্ছে…</p>}
@@ -1137,7 +1142,7 @@ export function TeamsPage({ profile }: { profile: AppProfile | null }) {
               </div>
               {!showMap && (
                 <button type="button" className="gps-btn" onClick={() => setShowMap(true)}>
-                  📍 Map-এ টিমের location pin করো <span className="req">*</span>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> Map-এ টিমের location pin করো <span className="req">*</span>
                 </button>
               )}
               {/* v15: GPS — one tap to use current location as the pin */}
@@ -1290,7 +1295,7 @@ export function TeamDetailPage({ teamId, profile }: { teamId: string; profile: A
       </div>
 
       <section className="card sos-card">
-        <h2>🚨 Emergency যোগাযোগ</h2>
+        <h2><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 18h.01"/></svg> Emergency যোগাযোগ</h2>
         {isMember ? (
           <TeamContacts teamId={teamId} />
         ) : (
@@ -1303,7 +1308,7 @@ export function TeamDetailPage({ teamId, profile }: { teamId: string; profile: A
       {roster.length === 0 && <p className="state">এখনো কোনো সদস্য নেই।</p>}
       {roster.map((m) => (
         <div className="member-row" key={m.user_id}>
-          <div className="avatar">👤</div>
+          <div className="avatar"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
           <div className="member-info"><b>{m.name}{m.role === 'lead' && <span className="lead-tag">LEAD</span>}</b></div>
           {isLead && m.role !== 'lead' && (
             <button className="small-btn danger" onClick={() => void removeMember(m.user_id, m.name)}>সরাও</button>

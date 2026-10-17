@@ -5,6 +5,10 @@ export interface AppProfile {
   name: string;
   phone: string;
   role: string;
+  ambassadorLevel?: string | null;
+  onboardingDone?: boolean;
+  thanaId?: string | null;
+  thanaName?: string | null;
 }
 
 export type VerificationStage = 0 | 1 | 2 | 3;
@@ -776,4 +780,97 @@ export function notifyTeamsAboutHotspot(body: {
   message?: string;
 }): Promise<{ notified: number; teams: string[] }> {
   return post('/api/hotspots/notify-teams', body);
+}
+
+// ---------------------------------------------------------------------------
+// v16 growth: stats, invite, onboarding, ambassador, ideas, case-teams, stories
+// ---------------------------------------------------------------------------
+
+export interface GrowthStats { users: number; reports: number; resolved: number; }
+export function fetchGrowthStats(): Promise<GrowthStats> {
+  return get('/api/growth/stats');
+}
+
+export function fetchMyInviteCode(): Promise<{ code: string }> {
+  return get('/api/growth/invite/me');
+}
+export function resolveInviteCode(code: string): Promise<{ inviterName: string }> {
+  return get(`/api/growth/invite/${encodeURIComponent(code)}`);
+}
+export function redeemInviteCode(code: string): Promise<{ ok: boolean }> {
+  return post('/api/growth/invite/redeem', { code });
+}
+export function fetchInviteStats(): Promise<{ invited: number }> {
+  return get('/api/growth/invite/stats');
+}
+export function completeOnboarding(thanaId?: string): Promise<{ ok: boolean }> {
+  return post('/api/growth/onboarding/complete', thanaId ? { thanaId } : {});
+}
+
+export interface Institution { id: string; name: string; level: 'university' | 'college' | 'school'; district: string | null; }
+export function searchInstitutions(q: string, level?: string): Promise<{ institutions: Institution[] }> {
+  const query = new URLSearchParams({ q });
+  if (level) query.set('level', level);
+  return get(`/api/growth/institutions?${query.toString()}`);
+}
+
+export interface AmbassadorApplication {
+  id: string; userId: string; name: string; phone: string;
+  institutionId: string | null; institutionName: string; level: string;
+  idPhotoUrl: string | null; reason: string | null; status: string; createdAt: string;
+}
+export function applyAmbassador(input: {
+  name: string; phone: string; institutionId?: string; institutionName: string;
+  level: 'university' | 'college' | 'school'; idPhotoUrl?: string; reason?: string;
+}): Promise<{ id: string }> {
+  return post('/api/growth/ambassador/apply', input);
+}
+export function fetchMyAmbassadorStatus(): Promise<{ status: string | null; level: string | null }> {
+  return get('/api/growth/ambassador/my-status');
+}
+export function fetchAmbassadorApplications(scope: 'pending' | 'all' = 'pending'): Promise<{ applications: AmbassadorApplication[] }> {
+  return get(`/api/growth/ambassador/applications?scope=${scope}`);
+}
+export function reviewAmbassadorApplication(id: string, decision: 'approved' | 'rejected'): Promise<{ ok: boolean }> {
+  return post(`/api/growth/ambassador/applications/${encodeURIComponent(id)}/review`, { decision });
+}
+export function fetchAmbassadors(): Promise<{ ambassadors: Array<{ name: string; institutionName: string; level: string }> }> {
+  return get('/api/growth/ambassadors');
+}
+
+export interface Idea { id: string; title: string; voteCount: number; status: string; createdAt: string; author: string | null; }
+export function fetchIdeas(): Promise<{ ideas: Idea[] }> {
+  return get('/api/growth/ideas');
+}
+export function createIdea(title: string): Promise<{ id: string }> {
+  return post('/api/growth/ideas', { title });
+}
+export function voteIdea(id: string): Promise<{ voted: boolean }> {
+  return post(`/api/growth/ideas/${encodeURIComponent(id)}/vote`, {});
+}
+
+export interface CaseTeam { teamId: string; name: string; teamType: string; joinedAt: string; memberCount: number; }
+export function joinCaseTeam(reportId: string, teamId: string): Promise<{ ok: boolean }> {
+  return post(`/api/growth/reports/${encodeURIComponent(reportId)}/join-team`, { teamId });
+}
+export function fetchCaseTeams(reportId: string): Promise<{ teams: CaseTeam[] }> {
+  return get(`/api/growth/reports/${encodeURIComponent(reportId)}/teams`);
+}
+export function requestCaseLocation(reportId: string, teamId: string): Promise<{ ok: boolean; status?: string }> {
+  return post(`/api/growth/reports/${encodeURIComponent(reportId)}/request-location`, { teamId });
+}
+export interface LocationRequest { id: string; reportId: string; teamId: string; teamName: string; reportTitle: string; status: string; createdAt: string; }
+export function fetchMyLocationRequests(): Promise<{ requests: LocationRequest[] }> {
+  return get('/api/growth/location-requests/mine');
+}
+export function reviewLocationRequest(id: string, decision: 'approved' | 'rejected'): Promise<{ ok: boolean }> {
+  return post(`/api/growth/location-requests/${encodeURIComponent(id)}/review`, { decision });
+}
+export function fetchLocationStatus(reportId: string, teamId: string): Promise<{ status: string | null }> {
+  return get(`/api/growth/reports/${encodeURIComponent(reportId)}/location-status?teamId=${encodeURIComponent(teamId)}`);
+}
+
+export interface CaseStory { id: string; reportId: string; title: string; body: string; teamCount: number; memberCount: number; createdAt: string; }
+export function fetchStories(): Promise<{ stories: CaseStory[] }> {
+  return get('/api/growth/stories');
 }

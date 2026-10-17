@@ -19,6 +19,16 @@ import CasePage from './CasePage';
 import HotspotPage from './HotspotPage';
 import SosPage from './SosPage';
 import { LangProvider, useLang, type Lang } from './i18n';
+import {
+  AmbassadorApplyPage,
+  AmbassadorReviewPage,
+  CampusPage,
+  IdeasPage,
+  InviteLanding,
+  InvitePage,
+  OnboardingTour,
+  shouldShowOnboarding,
+} from './growth';
 
 function useHashRoute(): string {
   const [hash, setHash] = useState(window.location.hash || '#/');
@@ -102,6 +112,9 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
     { href: '#/track', label: 'Track', icon: (<svg {...iconProps}><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>) },
     { href: '#/hotspots', label: t('nav_hotspots'), icon: (<svg {...iconProps}><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14M15 6v14" /></svg>) },
     { href: '#/sos', label: 'SOS', sos: true, icon: (<svg {...iconProps}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M12 8v4M12 16h.01" /></svg>) },
+    { href: '#/invite', label: 'Invite', icon: (<svg {...iconProps}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>) },
+    { href: '#/ideas', label: 'Idea', icon: (<svg {...iconProps}><path d="M9 18h6" /><path d="M10 22h4" /><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.4 1 2.3h6c0-.9.4-1.8 1-2.3A7 7 0 0012 2z" /></svg>) },
+    { href: '#/campus', label: 'Campus', icon: (<svg {...iconProps}><path d="M22 10L12 5 2 10l10 5 10-5z" /><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /><path d="M22 10v6" /></svg>) },
   ];
   if (isMod) {
     items.push({
@@ -197,15 +210,20 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
 function Shell() {
   const route = useHashRoute();
   const auth = useAuthState();
+  const [showTour, setShowTour] = useState(false);
+
+  const profile = auth.profile;
+  const signedIn = !!auth.session && !!profile;
+
+  useEffect(() => {
+    if (signedIn && shouldShowOnboarding()) setShowTour(true);
+  }, [signedIn]);
 
   if (auth.loading) return <LoadingPage text="Prohori চালু হচ্ছে…" />;
   if (auth.session && auth.profileLoading) return <LoadingPage text="আপনার account যাচাই হচ্ছে…" />;
   if (auth.session && !auth.profile) {
     return <ProfileSetupPage user={auth.session.user} onComplete={() => { void auth.refreshProfile(); }} />;
   }
-
-  const profile = auth.profile;
-  const signedIn = !!auth.session && !!profile;
   const routePathRaw = route.startsWith('#') ? route.slice(1) : route;
   const routePath = signedIn && routePathRaw === '/login' ? '/' : routePathRaw;
   const routeBase = routePath.split('?')[0];
@@ -242,12 +260,26 @@ function Shell() {
     page = <TrendsPage />;
   } else if (routePath.startsWith('/case/')) {
     page = <CasePage trackingId={decodeURIComponent(routePath.slice('/case/'.length))} signedIn={signedIn} />;
+  } else if (routePath === '/invite') {
+    page = signedIn ? <InvitePage /> : <LoginPage />;
+  } else if (routePath.startsWith('/i/')) {
+    page = <InviteLanding code={decodeURIComponent(routePath.slice('/i/'.length))} />;
+  } else if (routePath === '/ideas') {
+    page = <IdeasPage signedIn={signedIn} />;
+  } else if (routePath === '/campus') {
+    page = <CampusPage signedIn={signedIn} />;
+  } else if (routePath === '/campus/apply') {
+    page = <AmbassadorApplyPage signedIn={signedIn} userName={profile?.name ?? ''} userPhone={profile?.phone ?? ''} />;
+  } else if (routePath === '/campus/review') {
+    page = isMod
+      ? <AmbassadorReviewPage />
+      : <div className="page"><h1>অনুমতি নেই</h1><p className="meta">এই page শুধু moderator/admin account-এর জন্য।</p></div>;
   } else if (routePath === '/moderation') {
     page = isMod
       ? <ModerationPage profile={profile} />
       : <div className="page"><h1>অনুমতি নেই</h1><p className="meta">এই page শুধু moderator/admin account-এর জন্য।</p></div>;
   } else {
-    page = <HomePage signedIn={signedIn} initialCategory={routeQuery.get('category') ?? ''} />;
+    page = <HomePage signedIn={signedIn} initialCategory={routeQuery.get('category') ?? ''} profile={profile} />;
   }
 
   return (
@@ -271,6 +303,7 @@ function Shell() {
         </div>
       </nav>
       {page}
+      {showTour && signedIn && <OnboardingTour onDone={() => setShowTour(false)} />}
       <footer className="site-footer">Prohori MVP • জরুরি বিপদে ৯৯৯-এ কল করুন।</footer>
     </div>
   );

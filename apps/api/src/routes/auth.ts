@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db.js';
 import { isPgUniqueViolation, validateBody } from '../validate.js';
 import { requireAuth } from '../auth.js';
-import { users } from 'db';
+import { users, thanas } from 'db';
 
 export const authRouter = Router();
 

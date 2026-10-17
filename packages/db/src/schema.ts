@@ -9,6 +9,7 @@ import {
   numeric,
   uniqueIndex,
   index,
+  AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 // ---------------------------------------------------------------------------
@@ -31,6 +32,11 @@ export const users = pgTable('users', {
   // Used for SOS broadcast targeting — never exposed publicly.
   lastLat: doublePrecision('last_lat'),
   lastLng: doublePrecision('last_lng'),
+  // v16 growth: invite code, referral, onboarding, ambassador level.
+  inviteCode: text('invite_code').unique(),
+  invitedBy: uuid('invited_by').references((): AnyPgColumn => users.id),
+  onboardingDone: boolean('onboarding_done').notNull().default(false),
+  ambassadorLevel: text('ambassador_level'), // university | college | school | null
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -449,6 +455,129 @@ export const statusHistory = pgTable('status_history', {
   toStatus: text('to_status').notNull(),
   actorId: uuid('actor_id').references(() => users.id),
   note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * v16 growth tables.
+ */
+
+/** Educational institutions for campus ambassador signup (seeded). */
+export const institutions = pgTable(
+  'institutions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    level: text('level').notNull(), // university | college | school
+    district: text('district'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('institutions_name_level_uniq').on(t.name, t.level)],
+);
+
+/** Campus ambassador applications. status: pending | approved | rejected. */
+export const ambassadorApplications = pgTable('ambassador_applications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  phone: text('phone').notNull(),
+  institutionId: uuid('institution_id').references(() => institutions.id),
+  institutionName: text('institution_name').notNull(),
+  level: text('level').notNull(), // university | college | school
+  idPhotoUrl: text('id_photo_url'),
+  reason: text('reason'),
+  status: text('status').notNull().default('pending'),
+  reviewedBy: uuid('reviewed_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Feature ideas ("ফিচার চাও?"). status: open | planned | done | rejected. */
+export const featureIdeas = pgTable('feature_ideas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  voteCount: integer('vote_count').notNull().default(0),
+  status: text('status').notNull().default('open'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ideaVotes = pgTable(
+  'idea_votes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ideaId: uuid('idea_id')
+      .notNull()
+      .references(() => featureIdeas.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('idea_votes_idea_user_uniq').on(t.ideaId, t.userId)],
+);
+
+/** Teams that joined a case (report). min 3 members enforced at API. */
+export const caseTeams = pgTable(
+  'case_teams',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reportId: uuid('report_id')
+      .notNull()
+      .references(() => reports.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => volunteerTeams.id, { onDelete: 'cascade' }),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('case_teams_report_team_uniq').on(t.reportId, t.teamId)],
+);
+
+/** Team requests for a report's exact location. status: pending | approved | rejected. */
+export const locationRequests = pgTable(
+  'location_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reportId: uuid('report_id')
+      .notNull()
+      .references(() => reports.id, { onDelete: 'cascade' }),
+    teamId: uuid('team_id')
+      .notNull()
+      .references(() => volunteerTeams.id, { onDelete: 'cascade' }),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('location_requests_report_team_uniq').on(t.reportId, t.teamId)],
+);
+
+/** Auto-generated stories for solved cases (viral loop). */
+export const caseStories = pgTable('case_stories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reportId: uuid('report_id')
+    .notNull()
+    .references(() => reports.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  teamCount: integer('team_count').notNull().default(0),
+  memberCount: integer('member_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Referral tracking for the invite system. */
+export const referrals = pgTable('referrals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  inviterId: uuid('inviter_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  invitedId: uuid('invited_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

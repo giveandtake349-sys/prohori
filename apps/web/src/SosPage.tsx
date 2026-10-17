@@ -235,7 +235,7 @@ export default function SosPage({ profile }: { profile: AppProfile | null }) {
             ) : (
               mySos.responders.map((r) => (
                 <div className="responder-row" key={r.name + r.created_at}>
-                  <span className="ok">✅</span>
+                  <span className="ok">✓</span>
                   <b>{r.name}</b>
                   <small>{bn ? 'আসছে' : 'responded'} · {timeAgo(r.created_at, bn)}</small>
                 </div>
@@ -272,12 +272,12 @@ export default function SosPage({ profile }: { profile: AppProfile | null }) {
             </>
           )}
           {step === 'locating' && (
-            <p className="state">{bn ? '📍 লোকেশন নেওয়া হচ্ছে…' : '📍 Getting location…'}</p>
+            <p className="state">{bn ? 'লোকেশন নেওয়া হচ্ছে…' : 'Getting location…'}</p>
           )}
           {step === 'confirm' && loc && (
             <div className="sheet sos-confirm">
               <div className="loc">
-                📍{' '}
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>{' '}
                 <span>
                   {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}{' '}
                   <small className="ok-text">· {bn ? 'GPS locked' : 'GPS locked'}</small>
@@ -301,21 +301,21 @@ export default function SosPage({ profile }: { profile: AppProfile | null }) {
                   {bn ? 'বাদ দাও' : 'Cancel'}
                 </button>
                 <button className="btn send" onClick={() => void onSend()}>
-                  🚨 {bn ? 'Alert পাঠাও' : 'Send Alert'}
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 18h.01"/></svg> {bn ? 'Alert পাঠাও' : 'Send Alert'}
                 </button>
               </div>
             </div>
           )}
           {step === 'sending' && (
-            <p className="state">{bn ? '🚨 Alert পাঠানো হচ্ছে…' : '🚨 Sending alert…'}</p>
+            <p className="state">{bn ? 'Alert পাঠানো হচ্ছে…' : 'Sending alert…'}</p>
           )}
           {locError && <p className="form-error">{locError}</p>}
           {sendError && <p className="form-error">{sendError}</p>}
           {sendResult && (
             <p className="form-notice">
               {bn
-                ? `✅ Alert পাঠানো হয়েছে — ${sendResult.notified} জন + ${sendResult.teams}টি টিমকে জানানো হয়েছে`
-                : `✅ Alert sent — ${sendResult.notified} people + ${sendResult.teams} teams notified`}
+                ? `✓ Alert পাঠানো হয়েছে — ${sendResult.notified} জন + ${sendResult.teams}টি টিমকে জানানো হয়েছে`
+                : `✓ Alert sent — ${sendResult.notified} people + ${sendResult.teams} teams notified`}
             </p>
           )}
           <a className="contact-row call999 sos-999" href="tel:999">
@@ -328,7 +328,7 @@ export default function SosPage({ profile }: { profile: AppProfile | null }) {
       {signedIn && (
         <section className="sos-feed">
           <div className="section-heading">
-            <h2 className="sec">{bn ? '📡 আশেপাশে সক্রিয় SOS' : '📡 Active SOS nearby'}</h2>
+            <h2 className="sec">{bn ? (<><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="2"/><path d="M7.5 7.5a6.4 6.4 0 000 9M16.5 7.5a6.4 6.4 0 010 9"/></svg> আশেপাশে সক্রিয় SOS</>) : (<><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="2"/><path d="M7.5 7.5a6.4 6.4 0 000 9M16.5 7.5a6.4 6.4 0 010 9"/></svg> Active SOS nearby</>)}</h2>
           </div>
           {feedLoading && <p className="state">{bn ? 'লোড হচ্ছে…' : 'Loading…'}</p>}
           {feedError && <p className="form-error">{feedError}</p>}
@@ -345,7 +345,7 @@ export default function SosPage({ profile }: { profile: AppProfile | null }) {
               </div>
               {a.message && <div className="msg">"{a.message}"</div>}
               <div className="dist">
-                📍{' '}
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>{' '}
                 {a.distance_km < 1
                   ? bn
                     ? `${Math.round(a.distance_km * 1000)} মিটার দূরে`
@@ -358,7 +358,7 @@ export default function SosPage({ profile }: { profile: AppProfile | null }) {
               {a.mine ? (
                 <p className="meta">{bn ? 'এটা তোমার SOS' : 'This is your SOS'}</p>
               ) : a.i_responded ? (
-                <div className="responded">✅ {bn ? 'তুমি respond করেছ' : 'You responded'}</div>
+                <div className="responded">✓ {bn ? 'তুমি respond করেছ' : 'You responded'}</div>
               ) : (
                 <button
                   className="btn respond"
@@ -369,14 +369,14 @@ export default function SosPage({ profile }: { profile: AppProfile | null }) {
                     ? bn
                       ? 'পাঠানো হচ্ছে…'
                       : 'Sending…'
-                    : `✋ ${bn ? 'আমি যাচ্ছি' : "I'm responding"}`}
+                    : `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6.5a1.5 1.5 0 00-3 0V11m0-5.5v-2a1.5 1.5 0 00-3 0V11m0-7.5a1.5 1.5 0 00-3 0V12m-2-4v4a7 7 0 0014 0V9"/></svg> ${bn ? 'আমি যাচ্ছি' : "I'm responding"}`}
                 </button>
               )}
               {a.responders.length > 0 && (
                 <div className="responder-names">
                   {a.responders.map((r) => (
                     <span key={r.name + r.created_at} className="responder-chip">
-                      ✅ {r.name}
+                      ✓ {r.name}
                     </span>
                   ))}
                 </div>

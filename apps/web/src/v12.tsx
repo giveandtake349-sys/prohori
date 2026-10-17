@@ -29,9 +29,9 @@ export function stageOf(report: FeedReport): VerificationStage {
 
 const STAGE_BN: Record<VerificationStage, string> = {
   0: 'যাচাই হয়নি',
-  1: '🟡 প্রাথমিকভাবে নিশ্চিত',
-  2: '👥 জনতা যাচাইকৃত',
-  3: '🛡️ প্রহরী যাচাইকৃত',
+  1: 'প্রাথমিকভাবে নিশ্চিত',
+  2: 'জনতা যাচাইকৃত',
+  3: 'প্রহরী যাচাইকৃত',
 };
 
 /** Staged verification badge. 0 gray → 1 yellow → 2 blue → 3 green. */
@@ -165,7 +165,7 @@ export function DeadlineTag({
         : null;
     return (
       <span className="deadline-wrap">
-        <span className="chip deadline overdue">🟥 ব্যর্থ — {days} দিন</span>
+        <span className="chip deadline overdue">ব্যর্থ — {days} দিন</span>
         {level && <small className="esc-note">{level} পর্যায়ে এসকেলেটেড</small>}
       </span>
     );
@@ -387,7 +387,7 @@ export function CasePrintView({
       <div className="print-sheet">
         <div className="print-actions">
           <button type="button" className="primary-btn" onClick={() => window.print()}>
-            🖨️ প্রিন্ট করো
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7"/><rect x="2" y="9" width="20" height="8" rx="2"/><path d="M6 14h12v8H6z"/></svg> প্রিন্ট করো
           </button>
           <button type="button" className="small-btn" onClick={onClose}>
             বন্ধ করো

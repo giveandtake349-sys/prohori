@@ -18,8 +18,8 @@ const CATEGORY_FILTERS = [
 
 const TIME_FILTERS = [
   { key: '', bn: 'সব সময়', en: 'All time' },
-  { key: 'night', bn: '🌙 রাত', en: '🌙 Night' },
-  { key: 'day', bn: '☀️ দিন', en: '☀️ Day' },
+  { key: 'night', bn: 'রাত', en: 'Night' },
+  { key: 'day', bn: 'দিন', en: 'Day' },
 ];
 
 const RISK_COLOR: Record<HotspotCell['risk'], string> = {
@@ -224,7 +224,7 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
     <div className="page hotspot-page">
       <div className="hotspot-topbar">
         <BackArrow />
-        <h2 className="sec" style={{ margin: 0 }}>🗺️ {bn ? 'হটস্পট ম্যাপ' : 'Hotspot map'}</h2>
+        <h2 className="sec" style={{ margin: 0 }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg> {bn ? 'হটস্পট ম্যাপ' : 'Hotspot map'}</h2>
       </div>
 
       <div className="hotspot-mapwrap">
@@ -262,7 +262,7 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
           aria-label={bn ? 'আমার অবস্থান' : 'My location'}
           disabled={locating}
         >
-          {locating ? '…' : '📍'}
+          {locating ? '…' : (<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>)}
         </button>
 
         <div className="hotspot-legend">
@@ -320,14 +320,14 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
               }
             }}
           >
-            {routeMode ? (bn ? '📍 ম্যাপে ২টা জায়গা tap করো…' : '📍 Tap 2 points…') : (bn ? '🛣️ রুট চেক করো' : '🛣️ Check route')}
+            {routeMode ? (bn ? (<><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> ম্যাপে ২টা জায়গা tap করো…</>) : (<><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> Tap 2 points…</>)) : (bn ? (<><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H15a3 3 0 000-6H9a3 3 0 010-6h6.5"/></svg> রুট চেক করো</>) : (<><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H15a3 3 0 000-6H9a3 3 0 010-6h6.5"/></svg> Check route</>))}
           </button>
         </div>
         {routeResult && (
           <p className="meta" style={{ marginTop: 8 }}>
             {routeResult === 'risky'
-              ? <span className="badge-risk">⚠️ {bn ? 'ঝুঁকিপূর্ণ রুট — হটস্পট পার হচ্ছে' : 'Risky route — crosses hotspot'}</span>
-              : <span className="badge-safe">✅ {bn ? 'নিরাপদ রুট' : 'Safe route'}</span>}
+              ? <span className="badge-risk"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 18h.01"/></svg> {bn ? 'ঝুঁকিপূর্ণ রুট — হটস্পট পার হচ্ছে' : 'Risky route — crosses hotspot'}</span>
+              : <span className="badge-safe">✓ {bn ? 'নিরাপদ রুট' : 'Safe route'}</span>}
           </p>
         )}
       </div>
@@ -337,7 +337,7 @@ export default function HotspotPage({ signedIn }: { signedIn: boolean }) {
           <div className="grab" />
           <div className="sheet-head">
             <h3>
-              {selected.risk === 'high' ? '🔴' : selected.risk === 'medium' ? '🟡' : '🟢'}{' '}
+              <span className={`risk-dot ${selected.risk}`} />{' '}
               {bn ? 'হটস্পট' : 'Hotspot'}
             </h3>
             <button className="sheet-close" onClick={() => setSelected(null)} aria-label={bn ? 'বন্ধ' : 'Close'}>✕</button>

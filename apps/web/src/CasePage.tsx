@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchReportByTrackingId, caseShareUrl, shareReport, type ReportDetail } from './api';
+import { CaseTeamBox } from './growth';
 import { useLang } from './i18n';
 import { STATUS_BN } from './labels';
 import ShareButtons from './share';
@@ -75,7 +76,7 @@ export default function CasePage({ trackingId, signedIn }: { trackingId: string;
           signedIn={signedIn}
         />
         <button type="button" className="pdf-btn" onClick={() => setShowPrint(true)}>
-          📄 PDF
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg> PDF
         </button>
       </div>
       <article className="card">
@@ -106,6 +107,8 @@ export default function CasePage({ trackingId, signedIn }: { trackingId: string;
           </div>
         )}
       </article>
+
+      <CaseTeamBox reportId={r.id} signedIn={signedIn} />
 
       <h2 className="sec">{t('progress')}</h2>
       <ol className="timeline">
