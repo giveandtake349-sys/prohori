@@ -852,3 +852,18 @@ a.card.score-row { border-radius: 12px; padding: 12px 14px; }
 [data-theme="dark"] .tj-route { background: var(--surface); border: 1px solid var(--line); }
 [data-theme="dark"] .tj-city { color: var(--ink); }
 [data-theme="dark"] .tj-pill { color: var(--muted); }
+
+/* ---- Radial "more" button + bottom sheet (v19.8) ---- */
+.ritem.more .rc { background: var(--ink); border-color: var(--ink); color: var(--yellow); }
+.more-sheet { position: fixed; inset: 0; z-index: 70; }
+.more-bg { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+.more-panel { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-radius: 20px 20px 0 0; padding: 10px 16px 26px; box-shadow: 0 -8px 30px rgba(0,0,0,.18); animation: more-up .25s ease; max-height: 70vh; overflow-y: auto; }
+@keyframes more-up { from { transform: translateY(40px); opacity: 0; } }
+.more-grab { width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 2px auto 10px; }
+.more-panel h3 { font-size: 15px; margin: 0 0 6px; color: var(--ink); }
+.mrow { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--line); text-decoration: none; color: var(--ink); }
+.mrow .mic { width: 38px; height: 38px; border-radius: 50%; background: var(--surface2); border: 1.5px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--blue); flex: none; }
+.mrow .mic svg { width: 18px; height: 18px; }
+.mrow.sos .mic { background: var(--yellow); border-color: var(--yellow); color: var(--on-yellow); }
+.mrow .mtxt { font-size: 14px; font-weight: 700; }
+.mrow .mtxt small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 1px; }

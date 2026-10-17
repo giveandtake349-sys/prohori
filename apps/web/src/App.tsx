@@ -94,6 +94,7 @@ function LangToggle() {
 function RadialMenu({ isMod }: { isMod: boolean }) {
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(false);
+  const [sheet, setSheet] = useState(false);
   const { t } = useLang();
 
   const iconProps = {
@@ -102,25 +103,27 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
   } as const;
 
   const items: { href: string; label: string; sos?: boolean; icon: ReactNode }[] = [
-    { href: '#/', label: t('nav_report'), icon: (<svg {...iconProps}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><path d="M9 22V12h6v10" /></svg>) },
-    { href: '#/reports/new', label: t('report_h'), icon: (<svg {...iconProps}><path d="M12 5v14M5 12h14" /></svg>) },
-    { href: '#/teams', label: t('nav_teams'), icon: (<svg {...iconProps}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>) },
-    { href: '#/scorecard', label: t('nav_scorecard'), icon: (<svg {...iconProps}><path d="M3 3v18h18" /><path d="M7 15l4-5 3 3 5-7" /></svg>) },
-    { href: '#/dabi', label: t('nav_dabi'), icon: (<svg {...iconProps}><path d="M4 21V10l8-6 8 6v11" /><path d="M12 10v11" /></svg>) },
-    { href: '#/missing', label: t('nav_missing'), icon: (<svg {...iconProps}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>) },
-    { href: '#/trends', label: t('nav_trends'), icon: (<svg {...iconProps}><path d="M23 6l-9.5 9.5-5-5L23 6z" /><path d="M17 6h6v6" /></svg>) },
-    { href: '#/fraud', label: t('nav_fraud'), icon: (<svg {...iconProps}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M9 12l2 2 4-4" /></svg>) },
-    { href: '#/track', label: 'Track', icon: (<svg {...iconProps}><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>) },
-    { href: '#/hotspots', label: t('nav_hotspots'), icon: (<svg {...iconProps}><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14M15 6v14" /></svg>) },
     { href: '#/tourist', label: t('nav_tourist'), icon: (<svg {...iconProps}><circle cx="12" cy="12" r="9" /><path d="M15.5 8.5l-2 5-5 2 2-5z" /></svg>) },
-    { href: '#/sos', label: 'SOS', sos: true, icon: (<svg {...iconProps}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M12 8v4M12 16h.01" /></svg>) },
+    { href: '#/hotspots', label: t('nav_hotspots'), icon: (<svg {...iconProps}><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z" /><path d="M9 4v14M15 6v14" /></svg>) },
+    { href: '#/missing', label: t('nav_missing'), icon: (<svg {...iconProps}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>) },
+    { href: '#/campus', label: 'Campus', icon: (<svg {...iconProps}><path d="M22 10L12 5 2 10l10 5 10-5z" /><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /><path d="M22 10v6" /></svg>) },
     { href: '#/invite', label: 'Invite', icon: (<svg {...iconProps}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>) },
     { href: '#/ideas', label: 'Idea', icon: (<svg {...iconProps}><path d="M9 18h6" /><path d="M10 22h4" /><path d="M12 2a7 7 0 00-4 12.7c.6.5 1 1.4 1 2.3h6c0-.9.4-1.8 1-2.3A7 7 0 0012 2z" /></svg>) },
-    { href: '#/campus', label: 'Campus', icon: (<svg {...iconProps}><path d="M22 10L12 5 2 10l10 5 10-5z" /><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /><path d="M22 10v6" /></svg>) },
+    { href: '#/fraud', label: t('nav_fraud'), icon: (<svg {...iconProps}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M9 12l2 2 4-4" /></svg>) },
+  ];
+  // NOTE: #/dabi removed (dead route, deleted in v18) — do not re-add.
+  const moreItems: { href: string; label: string; sub: string; sos?: boolean; icon: ReactNode }[] = [
+    { href: '#/reports/new', label: t('report_h'), sub: 'জরুরি অপরাধের রিপোর্ট', icon: (<svg {...iconProps}><path d="M12 5v14M5 12h14" /></svg>) },
+    { href: '#/sos', label: 'SOS', sub: 'বিপদে জরুরি সাহায্য', sos: true, icon: (<svg {...iconProps}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M12 8v4M12 16h.01" /></svg>) },
+    { href: '#/track', label: 'Track', sub: 'আমার রিপোর্টের অবস্থা', icon: (<svg {...iconProps}><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>) },
+    { href: '#/teams', label: t('nav_teams'), sub: 'স্বেচ্ছাসেবী টিম', icon: (<svg {...iconProps}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>) },
+    { href: '#/', label: t('nav_report'), sub: 'হোম ফিড', icon: (<svg {...iconProps}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><path d="M9 22V12h6v10" /></svg>) },
+    { href: '#/scorecard', label: t('nav_scorecard'), sub: 'থানার পারফরম্যান্স', icon: (<svg {...iconProps}><path d="M3 3v18h18" /><path d="M7 15l4-5 3 3 5-7" /></svg>) },
+    { href: '#/trends', label: t('nav_trends'), sub: 'আলোচিত রিপোর্ট', icon: (<svg {...iconProps}><path d="M23 6l-9.5 9.5-5-5L23 6z" /><path d="M17 6h6v6" /></svg>) },
   ];
   if (isMod) {
-    items.push({
-      href: '#/moderation', label: t('nav_moderate'),
+    moreItems.push({
+      href: '#/moderation', label: t('nav_moderate'), sub: 'মডারেশন',
       icon: (<svg {...iconProps}><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" /><path d="M1 14h6M9 8h6M17 16h6" /></svg>),
     });
   }
@@ -132,6 +135,7 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
   };
   const closeMenu = () => {
     setShown(false);
+    setSheet(false);
     document.body.style.overflow = '';
     window.setTimeout(() => setOpen(false), 220);
   };
@@ -163,7 +167,7 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
     };
   }, [open ]);
 
-  const n = items.length;
+  const n = items.length + 1; // 7 items + the "more" button
   const R = Math.min(window.innerWidth / 2 - 38, 150);
   const cx = window.innerWidth / 2;
   const cy = window.innerHeight * 0.44;
@@ -202,6 +206,49 @@ function RadialMenu({ isMod }: { isMod: boolean }) {
               </a>
             );
           })}
+          {(() => {
+            const a = (-90 + (items.length * 360) / n) * (Math.PI / 180);
+            const x = cx + R * Math.cos(a);
+            const y = cy + R * Math.sin(a);
+            return (
+              <button
+                key="more"
+                onClick={() => setSheet(true)}
+                className="ritem more"
+                style={{
+                  left: x - 28,
+                  top: y - 29,
+                  opacity: shown ? 1 : 0,
+                  transform: shown ? 'scale(1)' : 'scale(.4)',
+                  transitionDelay: `${items.length * 35}ms`,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  padding: 0,
+                }}
+                aria-label="আরো"
+              >
+                <span className="rc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg></span>
+                <small>আরো</small>
+              </button>
+            );
+          })()}
+          {sheet && (
+            <div className="more-sheet" role="dialog" aria-label="আরো ফিচার">
+              <div className="more-bg" onClick={() => setSheet(false)} />
+              <div className="more-panel">
+                <div className="more-grab" />
+                <h3>আরো ফিচার</h3>
+                {moreItems.map((m) => (
+                  <a key={m.href + m.label} href={m.href} onClick={closeMenu} className={m.sos ? 'mrow sos' : 'mrow'}>
+                    <span className="mic">{m.icon}</span>
+                    <span className="mtxt">{m.label}<small>{m.sub}</small></span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>,
         document.body
       )}
