@@ -679,6 +679,32 @@ export interface ModerationStats {
   verified_today: number;
   rejected_today: number;
   avg_verify_hours: number | null;
+  ambassador_pending: number;
+  scam_pending: number;
+}
+
+export interface PendingScamReport {
+  id: string;
+  placeName: string;
+  district: string;
+  scamType: string;
+  description: string;
+  askedPriceBdt: number | null;
+  fairPriceBdt: number | null;
+  status: string;
+  createdAt: string;
+  reporterName: string | null;
+}
+
+export function fetchPendingScamReports() {
+  return get<{ reports: PendingScamReport[] }>('/api/tourist/scam-reports/pending');
+}
+
+export function reviewScamReport(id: string, decision: 'approved' | 'rejected') {
+  return post<{ ok: boolean }>(
+    `/api/tourist/scam-reports/${encodeURIComponent(id)}/review`,
+    { decision },
+  );
 }
 
 export interface ReportHistory {

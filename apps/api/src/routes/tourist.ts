@@ -2,9 +2,9 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '../db.js';
-import { requireAuth, requireProfile } from '../auth.js';
+import { requireAuth, requireProfile, requireModerator } from '../auth.js';
 import { validateBody } from '../validate.js';
-import { touristSpots, fairPrices, scamExamples, touristScamReports } from 'db';
+import { touristSpots, fairPrices, scamExamples, touristScamReports, users } from 'db';
 
 export const touristRouter = Router();
 
@@ -220,6 +220,59 @@ const scamReportSchema = z.object({
   description: z.string().min(10).max(2000),
   asked_price_bdt: z.number().int().positive().optional(),
   fair_price_bdt: z.number().int().positive().optional(),
+});
+
+// GET /api/tourist/scam-reports/pending — moderator queue (pending only, with reporter name)
+touristRouter.get('/scam-reports/pending', requireAuth, requireModerator, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await db
+      .select({
+        id: touristScamReports.id,
+        placeName: touristScamReports.placeName,
+        district: touristScamReports.district,
+        scamType: touristScamReports.scamType,
+        description: touristScamReports.description,
+        askedPriceBdt: touristScamReports.askedPriceBdt,
+        fairPriceBdt: touristScamReports.fairPriceBdt,
+        status: touristScamReports.status,
+        createdAt: touristScamReports.createdAt,
+        reporterName: users.name,
+      })
+      .from(touristScamReports)
+      .leftJoin(users, eq(users.id, touristScamReports.reporterId))
+      .where(eq(touristScamReports.status, 'pending'))
+      .orderBy(desc(touristScamReports.createdAt))
+      .limit(100);
+    res.json({ reports: rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const scamReviewSchema = z.object({ decision: z.enum(['approved', 'rejected']) });
+
+// POST /api/tourist/scam-reports/:id/review — moderator approve/reject
+touristRouter.post('/scam-reports/:id/review', requireAuth, requireModerator, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = scamReviewSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'decision must be approved or rejected' });
+      return;
+    }
+    const [row] = await db
+      .select()
+      .from(touristScamReports)
+      .where(eq(touristScamReports.id, String(req.params.id)))
+      .limit(1);
+    if (!row) {
+      res.status(404).json({ error: 'report not found' });
+      return;
+    }
+    await db.update(touristScamReports).set({ status: parsed.data.decision }).where(eq(touristScamReports.id, row.id));
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
 });
 
 // POST /api/tourist/scam-reports — report a tourist scam (1-minute form)

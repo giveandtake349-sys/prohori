@@ -5,7 +5,7 @@ import { db } from '../db.js';
 import { requireAuth, requireModerator } from '../auth.js';
 import { validateBody, uuidParam } from '../validate.js';
 import { publicReportColumns, ALL_STATUSES, verificationTierOf } from '../lib/public.js';
-import { reports, statusHistory, alerts, moderationActions, users, reportFollowers } from 'db';
+import { reports, statusHistory, alerts, moderationActions, users, reportFollowers, ambassadorApplications, touristScamReports } from 'db';
 import { sendToUserIds } from '../lib/notify.js';
 import { generateCaseStory } from './growth.js';
 
@@ -293,6 +293,8 @@ adminRouter.get('/stats', requireAuth, requireModerator, async (_req: Request, r
     }
 
     res.json({
+    ambassador_pending: (await db.select({ n: count() }).from(ambassadorApplications).where(eq(ambassadorApplications.status, 'pending')))[0]?.n ?? 0,
+    scam_pending: (await db.select({ n: count() }).from(touristScamReports).where(eq(touristScamReports.status, 'pending')))[0]?.n ?? 0,
       pending: pendingRow?.n ?? 0,
       verified_today: verifiedRow?.n ?? 0,
       rejected_today: rejectedRow?.n ?? 0,

@@ -7,7 +7,9 @@ import {
   fetchDivisions,
   fetchDistricts,
   fetchEmergencyContacts,
+  fetchAmbassadorApplications,
   fetchModerationStats,
+  fetchPendingScamReports,
   fetchNearbySummary,
   fetchReportHistory,
   fetchModerationQueue,
@@ -21,6 +23,8 @@ import {
   leaveTeam,
   moderateReport,
   removeTeamMember,
+  reviewAmbassadorApplication,
+  reviewScamReport,
   reportFraudNumber,
   checkFraudNumber,
   setUserRole,
@@ -30,7 +34,9 @@ import {
   TEAM_TYPE_META,
   TEAM_TYPES,
   type AdminUser,
+  type AmbassadorApplication,
   type AppProfile,
+  type PendingScamReport,
   type District,
   type Division,
   type EmergencyContacts,
@@ -1473,6 +1479,47 @@ function AdminUsersTab() {
 }
 
 export function ModerationPage({ profile }: { profile: AppProfile | null }) {
+  const [tab, setTab] = useState<'reports' | 'ambassador' | 'scams' | 'users'>('reports');
+  const [stats, setStats] = useState<ModerationStats | null>(null);
+  const isAdmin = profile?.role === 'admin';
+  const refreshStats = () => fetchModerationStats().then(setStats).catch(() => setStats(null));
+  useEffect(() => { refreshStats(); }, []);
+
+  return (
+    <div className="page modhub">
+      <div className="modhub-hdr">
+        <div className="modhub-top">
+          <a className="back-arrow light" href="#/" aria-label="ফিরে যাও">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
+          </a>
+          <div><h1>মডারেশন হাব</h1><p>সব কন্ট্রোল এক জায়গায়</p></div>
+        </div>
+      </div>
+      {stats && (
+        <div className="modhub-stats">
+          <div className={stats.pending > 0 ? 'mstat alert' : 'mstat'}><b>{stats.pending}</b><small>রিপোর্ট বাকি</small></div>
+          <div className={stats.ambassador_pending > 0 ? 'mstat alert' : 'mstat'}><b>{stats.ambassador_pending}</b><small>অগ্রদূত বাকি</small></div>
+          <div className={stats.scam_pending > 0 ? 'mstat alert' : 'mstat'}><b>{stats.scam_pending}</b><small>স্ক্যাম বাকি</small></div>
+          <div className="mstat ok"><b>{stats.verified_today}</b><small>আজ যাচাই</small></div>
+        </div>
+      )}
+      <div className="modhub-tabs">
+        <button className={tab === 'reports' ? 'mtab on' : 'mtab'} onClick={() => setTab('reports')}>রিপোর্ট{stats && stats.pending > 0 && <span className="mn">{stats.pending}</span>}</button>
+        <button className={tab === 'ambassador' ? 'mtab on' : 'mtab'} onClick={() => setTab('ambassador')}>অগ্রদূত{stats && stats.ambassador_pending > 0 && <span className="mn">{stats.ambassador_pending}</span>}</button>
+        <button className={tab === 'scams' ? 'mtab on' : 'mtab'} onClick={() => setTab('scams')}>স্ক্যাম{stats && stats.scam_pending > 0 && <span className="mn">{stats.scam_pending}</span>}</button>
+        {isAdmin && <button className={tab === 'users' ? 'mtab on' : 'mtab'} onClick={() => setTab('users')}>ব্যবহারকারী</button>}
+      </div>
+      {!profile && <Message error>Login করে profile সম্পূর্ণ করুন।</Message>}
+      {tab === 'reports' && <ModReportsTab onAction={refreshStats} />}
+      {tab === 'ambassador' && <ModAmbassadorTab onAction={refreshStats} />}
+      {tab === 'scams' && <ModScamTab onAction={refreshStats} />}
+      {tab === 'users' && isAdmin && <AdminUsersTab />}
+      <p className="modhub-note">প্রতিটা action সাথে সাথে কার্যকর হয়</p>
+    </div>
+  );
+}
+
+function ModReportsTab({ onAction }: { onAction: () => void }) {
   const [queue, setQueue] = useState<FeedReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1482,11 +1529,8 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [targetStatuses, setTargetStatuses] = useState<Record<string, string>>({});
-  const [stats, setStats] = useState<ModerationStats | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'reports' | 'users'>('reports');
   const statusOptions = Object.keys(STATUS_BN);
-  const isAdmin = profile?.role === 'admin';
 
   const load = (offset = 0, append = false) => {
     setLoading(true); setError('');
@@ -1498,7 +1542,6 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Report list লোড হয়নি।'))
       .finally(() => setLoading(false));
-    fetchModerationStats().then(setStats).catch(() => setStats(null));
   };
   useEffect(() => { load(0, false); }, [scope]);
 
@@ -1507,35 +1550,14 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
     try {
       await moderateReport(reportId, status, notes[reportId]?.trim() || undefined);
       setNotes((current) => ({ ...current, [reportId]: '' }));
-      load(0, false);
+      load(0, false); onAction();
     } catch (err) { setError(err instanceof Error ? err.message : 'Status পরিবর্তন হয়নি।'); }
     finally { setWorkingId(''); }
   };
 
   return (
-    <div className="page">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}><a className="back-arrow" href="#/" aria-label="ফিরে যাও">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>
-        </a>
-        <h1 style={{ margin: 0 }}>Moderator / Admin — report control</h1>
-      </div>
-      <p className="meta">রিপোর্ট জমা হলেই public-এ যায়। এখান থেকে আপনি যাচাই, status update বা reject করে public feed থেকে সরাতে পারবেন। আপনার note reporter-এর Track page-এ দেখা যাবে।</p>
-      {!profile && <Message error>Login করে profile সম্পূর্ণ করুন।</Message>}
-      {stats && (
-        <div className="stat-grid mod-stats">
-          <div><b>{stats.pending}</b><small>অপেক্ষমাণ</small></div>
-          <div><b>{stats.verified_today}</b><small>আজ যাচাই</small></div>
-          <div><b>{stats.rejected_today}</b><small>আজ বাতিল</small></div>
-          <div><b>{stats.avg_verify_hours ?? '—'}</b><small>গড় যাচাই (ঘণ্টা)</small></div>
-        </div>
-      )}
-      <div className="filters">
-        <button className={tab === 'reports' ? 'fchip on' : 'fchip'} onClick={() => setTab('reports')}>রিপোর্ট</button>
-        {isAdmin && <button className={tab === 'users' ? 'fchip on' : 'fchip'} onClick={() => setTab('users')}>ব্যবহারকারী</button>}
-      </div>
-      {tab === 'users' && isAdmin && <AdminUsersTab />}
-      {tab === 'reports' && (
-      <>
+    <div>
+      <p className="meta">রিপোর্ট জমা হলেই public-এ যায়। এখান থেকে যাচাই, status update বা reject করে feed থেকে সরাতে পারবেন।</p>
       <div className="filters">
         <button className={scope === 'pending' ? 'fchip on' : 'fchip'} onClick={() => setScope('pending')}>যাচাই বাকি</button>
         <button className={scope === 'all' ? 'fchip on' : 'fchip'} onClick={() => setScope('all')}>সব report ({total})</button>
@@ -1543,30 +1565,20 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
       {loading && <p className="state">Report লোড হচ্ছে…</p>}
       {error && <Message error>{error}</Message>}
       {!loading && !error && queue.length === 0 && <p className="state">{scope === 'pending' ? 'যাচাইয়ের অপেক্ষায় কোনো report নেই।' : 'এখনো কোনো report জমা হয়নি।'}</p>}
-      <div className="feed">{queue.map((report) => (
+      {queue.map((report) => (
         <article className="mcard" key={report.id}>
-          <div className="rtop">
+          <div className="mcard-top">
             <span className="chip cat">{CATEGORY_BN[report.category] ?? report.category}</span>
-            <TierBadge tier={report.verificationTier} />
+            <span className="mcorr">✓ <b>{report.corroborationCount}</b> সাক্ষী</span>
+            <span className={`chip status st-${report.status}`}>{STATUS_BN[report.status] ?? report.status}</span>
           </div>
           <h3>{report.title}</h3>
-          <div className="mrow">
-            <span>✓ <b>{report.corroborationCount}</b> নিশ্চিত</span>
-            <span className={`chip status st-${report.status}`}>{STATUS_BN[report.status] ?? report.status}</span>
-            <span>tracking: <b>{report.trackingId}</b></span>
-          </div>
-          <p className="meta">{report.addressText}</p>
+          <p className="meta">{report.addressText} · #{report.trackingId}</p>
           <p className="desc">{report.description}</p>
-          <label className="form-label">Reporter-এর Track page-এ দেখানোর moderator note
-            <textarea rows={2} maxLength={1000} value={notes[report.id] ?? ''} onChange={(event) => setNotes((current) => ({ ...current, [report.id]: event.target.value }))} placeholder="যাচাই বা status update সম্পর্কে জানাতে লিখুন" />
-          </label>
-          <div className="mbtns">
-            <button className="mbtn info" onClick={() => setExpandedId((current) => current === report.id ? null : report.id)}>
-              {expandedId === report.id ? 'ইতিহাস লুকান' : 'ইতিহাস / লগ'}
-            </button>
+          <div className="macts">
             {scope === 'pending' ? (
               <>
-                <button className="mbtn ok" disabled={workingId === report.id} onClick={() => void change(report.id, 'verified')}>✓ প্রহরী সিল</button>
+                <button className="mbtn ok" disabled={workingId === report.id} onClick={() => void change(report.id, 'verified')}>✓ যাচাই</button>
                 <button className="mbtn no" disabled={workingId === report.id} onClick={() => void change(report.id, 'rejected')}>✕ বাতিল</button>
               </>
             ) : (
@@ -1574,15 +1586,119 @@ export function ModerationPage({ profile }: { profile: AppProfile | null }) {
                 <select aria-label={`${report.trackingId} report status`} value={targetStatuses[report.id] ?? report.status} disabled={workingId === report.id} onChange={(event) => setTargetStatuses((current) => ({ ...current, [report.id]: event.target.value }))}>
                   {statusOptions.map((status) => <option key={status} value={status}>{STATUS_BN[status] ?? status}</option>)}
                 </select>
-                <button className="mbtn ok" disabled={workingId === report.id || ((targetStatuses[report.id] ?? report.status) === report.status && !notes[report.id]?.trim())} onClick={() => void change(report.id, targetStatuses[report.id] ?? report.status)}>Status / note update করুন</button>
+                <button className="mbtn ok" disabled={workingId === report.id || ((targetStatuses[report.id] ?? report.status) === report.status && !notes[report.id]?.trim())} onClick={() => void change(report.id, targetStatuses[report.id] ?? report.status)}>Update</button>
               </>
             )}
+            <button className="mbtn ghost" onClick={() => setExpandedId((current) => current === report.id ? null : report.id)}>
+              {expandedId === report.id ? 'লুকান' : 'নোট + ইতিহাস'}
+            </button>
           </div>
-          {expandedId === report.id && <HistoryPanel reportId={report.id} />}
+          {expandedId === report.id && (
+            <div className="mexpand">
+              <label className="form-label">Moderator note (reporter-এর Track page-এ দেখাবে)
+                <textarea rows={2} maxLength={1000} value={notes[report.id] ?? ''} onChange={(event) => setNotes((current) => ({ ...current, [report.id]: event.target.value }))} placeholder="যাচাই সম্পর্কে জানাতে লিখুন" />
+              </label>
+              <HistoryPanel reportId={report.id} />
+            </div>
+          )}
         </article>
-      ))}</div>
+      ))}
       {nextOffset !== null && <button className="small-btn" disabled={loading} onClick={() => load(nextOffset, true)}>আরও report দেখুন</button>}
-      </>)}
+    </div>
+  );
+}
+
+const LEVEL_BN: Record<string, string> = { university: 'University', college: 'College', school: 'School' };
+
+function ModAmbassadorTab({ onAction }: { onAction: () => void }) {
+  const [apps, setApps] = useState<AmbassadorApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [workingId, setWorkingId] = useState('');
+  const [error, setError] = useState('');
+  const load = () => {
+    setLoading(true); setError('');
+    fetchAmbassadorApplications('pending')
+      .then((d) => setApps(d.applications))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'লোড হয়নি।'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+  const review = async (id: string, decision: 'approved' | 'rejected') => {
+    setWorkingId(id); setError('');
+    try { await reviewAmbassadorApplication(id, decision); load(); onAction(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'সিদ্ধান্ত কার্যকর হয়নি।'); }
+    finally { setWorkingId(''); }
+  };
+  return (
+    <div>
+      {loading && <p className="state">লোড হচ্ছে…</p>}
+      {error && <Message error>{error}</Message>}
+      {!loading && !error && apps.length === 0 && <p className="state">অপেক্ষমাণ কোনো application নেই।</p>}
+      {apps.map((a) => (
+        <article className="mcard blue" key={a.id}>
+          <div className="mcard-top"><span className="chip blue">{LEVEL_BN[a.level] ?? a.level}</span></div>
+          <div className="mwho"><span className="avatar">{a.name.charAt(0)}</span><span><b>{a.name}</b><small>{a.institutionName} · {a.phone}</small></span></div>
+          {a.idPhotoUrl && <img src={a.idPhotoUrl} alt="Student ID" className="midphoto" />}
+          {a.reason && <p className="desc">“{a.reason}”</p>}
+          <div className="macts">
+            <button className="mbtn ok" disabled={workingId === a.id} onClick={() => void review(a.id, 'approved')}>✓ Approve</button>
+            <button className="mbtn no" disabled={workingId === a.id} onClick={() => void review(a.id, 'rejected')}>✕ Reject</button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+const SCAM_TYPE_BN: Record<string, string> = {
+  overcharge: 'বেশি দাম', fake_guide: 'ভুয়া গাইড', hotel: 'হোটেল প্রতারণা',
+  restaurant: 'রেস্টুরেন্ট', transport: 'পরিবহন', harassment: 'হয়রানি', other: 'অন্যান্য',
+};
+
+function ModScamTab({ onAction }: { onAction: () => void }) {
+  const [list, setList] = useState<PendingScamReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [workingId, setWorkingId] = useState('');
+  const [error, setError] = useState('');
+  const load = () => {
+    setLoading(true); setError('');
+    fetchPendingScamReports()
+      .then((d) => setList(d.reports))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'লোড হয়নি।'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+  const review = async (id: string, decision: 'approved' | 'rejected') => {
+    setWorkingId(id); setError('');
+    try { await reviewScamReport(id, decision); load(); onAction(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'সিদ্ধান্ত কার্যকর হয়নি।'); }
+    finally { setWorkingId(''); }
+  };
+  const fmt = (n: number | null) => n == null ? '—' : `৳${n.toLocaleString('en-US')}`;
+  return (
+    <div>
+      {loading && <p className="state">লোড হচ্ছে…</p>}
+      {error && <Message error>{error}</Message>}
+      {!loading && !error && list.length === 0 && <p className="state">অপেক্ষমাণ কোনো scam report নেই।</p>}
+      {list.map((r) => (
+        <article className="mcard red" key={r.id}>
+          <div className="mcard-top">
+            <span className="chip red">{SCAM_TYPE_BN[r.scamType] ?? r.scamType}</span>
+            <span className="mcorr">{r.district}</span>
+          </div>
+          <h3>{r.placeName}</h3>
+          <p className="desc">{r.description}</p>
+          <div className="mwho"><span className="avatar">{(r.reporterName ?? '?').charAt(0)}</span><span><small>{r.reporterName ?? 'বেনামী'}</small></span></div>
+          <div className="mcmp">
+            <div className="ok"><small>সঠিক দাম</small><b>{fmt(r.fairPriceBdt)}</b></div>
+            <div className="bad"><small>চেয়েছে</small><b>{fmt(r.askedPriceBdt)}</b></div>
+          </div>
+          <div className="macts">
+            <button className="mbtn ok" disabled={workingId === r.id} onClick={() => void review(r.id, 'approved')}>✓ Approve</button>
+            <button className="mbtn no" disabled={workingId === r.id} onClick={() => void review(r.id, 'rejected')}>✕ Reject</button>
+          </div>
+        </article>
+      ))}
     </div>
   );
 }
