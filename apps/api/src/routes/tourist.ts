@@ -112,10 +112,19 @@ touristRouter.get('/spots/:id', async (req: Request, res: Response, next: NextFu
 touristRouter.get('/check', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { from, to, category } = req.query as { from?: string; to?: string; category?: string };
+    const terms = [from, to].filter((x): x is string => !!x && x.trim().length > 0);
     const conds = [];
-    if (from || to) {
-      const q = `%${from ?? ''}%${to ?? ''}%`.replace(/%%/g, '%');
-      conds.push(ilike(fairPrices.routeOrItem, q === '%' ? '%%' : q));
+    if (terms.length) {
+      // Match ANY term against route, destination or district (forgiving: user types free text)
+      const perTerm = terms.map((term) => {
+        const q = `%${term.trim()}%`;
+        return or(
+          ilike(fairPrices.routeOrItem, q),
+          ilike(fairPrices.destination, q),
+          ilike(fairPrices.district, q),
+        );
+      });
+      conds.push(or(...perTerm));
     }
     if (category) conds.push(eq(fairPrices.category, category));
     const rows = await db

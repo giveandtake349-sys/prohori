@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLang } from './i18n';
 
-const API = ''; // same origin via vite proxy / relative fetch
+import { API_BASE } from './supabaseClient';
 
 async function apiGet<T>(path: string): Promise<T> {
-  const r = await fetch(`${API}${path}`);
+  const r = await fetch(`${API_BASE}${path}`);
   if (!r.ok) throw new Error('request failed');
   return r.json() as Promise<T>;
 }
 async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const r = await fetch(`${API}${path}`, {
+  const r = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -90,15 +90,32 @@ export default function TouristPage({ signedIn }: { signedIn: boolean }) {
     }
   }, [view, activeSpot]);
 
-  const spotById = useMemo(() => new Map(spots.map((s) => [s.id, s])), [spots]);
+  const spotById = useMemo(() => {
+    const m = new Map(spots.map((s) => [s.id, s]));
+    // synthetic district entries mirror JourneySelect's districtOpts ids
+    const seen = new Set<string>();
+    let n = 0;
+    for (const sp of spots) {
+      if (!seen.has(sp.district)) {
+        seen.add(sp.district); n += 1;
+        m.set(-n, {
+          id: -n, nameEn: sp.district, nameBn: sp.district,
+          district: sp.district, division: sp.division, type: 'district', description: null,
+        });
+      }
+    }
+    return m;
+  }, [spots]);
+  const norm = (v: string) => v.toLowerCase().replace(/['`\u2019]/g, '').replace(/\s+/g, ' ').trim();
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = norm(search);
     if (!q) return spots.slice(0, 30);
     return spots.filter(
       (s) =>
-        s.nameEn.toLowerCase().includes(q) ||
-        s.nameBn.includes(search.trim()) ||
-        s.district.toLowerCase().includes(q),
+        norm(s.nameEn).includes(q) ||
+        norm(s.nameBn).includes(q) ||
+        norm(s.district).includes(q) ||
+        norm(s.division).includes(q),
     ).slice(0, 30);
   }, [spots, search]);
 
@@ -134,6 +151,7 @@ export default function TouristPage({ signedIn }: { signedIn: boolean }) {
           setFromId={setFromId}
           setToId={setToId}
           spotById={spotById}
+          allSpots={spots}
           onStart={() => setView('journey')}
         />
       )}
@@ -174,11 +192,29 @@ function JourneySelect(props: {
   fromId: number | null; toId: number | null;
   setFromId: (n: number | null) => void; setToId: (n: number | null) => void;
   spotById: Map<number, TouristSpot>; onStart: () => void;
+  allSpots: TouristSpot[];
 }) {
-  const { spots, search, setSearch, fromId, toId, setFromId, setToId, spotById, onStart } = props;
+  const { spots, search, setSearch, fromId, toId, setFromId, setToId, spotById, onStart, allSpots } = props;
   const [picking, setPicking] = useState<'from' | 'to' | null>(null);
   const fromSpot = fromId != null ? spotById.get(fromId) : undefined;
   const toSpot = toId != null ? spotById.get(toId) : undefined;
+  // District-level options (synthetic, negative ids) so users can pick "Dhaka" / "Cox's Bazar" directly
+  const normD = (v: string) => v.toLowerCase().replace(/['`\u2019]/g, '');
+  const districtOpts = useMemo(() => {
+    const q = normD(search.trim());
+    const seen = new Map<string, TouristSpot>();
+    for (const sp of allSpots) {
+      if (!seen.has(sp.district)) {
+        seen.set(sp.district, {
+          id: -(seen.size + 1), nameEn: sp.district, nameBn: sp.district,
+          district: sp.district, division: sp.division, type: 'district', description: null,
+        });
+      }
+    }
+    const all = [...seen.values()];
+    if (!q) return all.slice(0, 8);
+    return all.filter((d) => normD(d.district).includes(q)).slice(0, 8);
+  }, [allSpots, search]);
 
   return (
     <div className="card">
@@ -199,6 +235,19 @@ function JourneySelect(props: {
             autoFocus
           />
           <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {districtOpts.map((d) => (
+              <div
+                key={d.id}
+                onClick={() => {
+                  if (picking === 'from') setFromId(d.id); else setToId(d.id);
+                  setPicking(null); setSearch('');
+                }}
+                style={{ padding: '9px 4px', borderBottom: '1px solid var(--line)', cursor: 'pointer', background: 'rgba(234,179,8,.05)' }}
+              >
+                <b style={{ fontSize: 14 }}>📍 {d.nameBn}</b>{' '}
+                <span className="meta" style={{ margin: 0 }}>জেলা · {d.division}</span>
+              </div>
+            ))}
             {spots.map((s) => (
               <div
                 key={s.id}
@@ -249,7 +298,11 @@ function JourneyView({ fromSpot, toSpot, onOpenSpot }: {
           <b>{sg.icon} {sg.title}</b>
           <p className="meta" style={{ margin: '4px 0 8px' }}>{sg.sub}</p>
           {i === 2 ? (
-            <button className="btn" onClick={() => onOpenSpot(toSpot.id)}>📂 {toSpot.nameBn} এর সব তথ্য দেখো</button>
+            toSpot.id > 0 ? (
+              <button className="btn" onClick={() => onOpenSpot(toSpot.id)}>📂 {toSpot.nameBn} এর সব তথ্য দেখো</button>
+            ) : (
+              <p className="meta" style={{ margin: 0 }}>💡 নিচে এই জেলার স্ক্যাম আর সঠিক দাম দেখো</p>
+            )
           ) : (
             <p className="meta" style={{ margin: 0 }}>
               {segData ? `${segData.prices.length} দাম · ${segData.scams.length} স্ক্যাম রেকর্ড` : 'লোড হচ্ছে…'}
