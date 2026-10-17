@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   checkShield,
   fetchShieldRadar,
@@ -21,6 +21,31 @@ const SAMPLES: Record<string, string> = {
   number: "01312-345678 — 'আমি বিকাশ অফিসার, upobritti এসেছে, OTP দিন'",
   app: 'QuickCash Loan — NID দিয়েই ৫০ হাজার টাকা লোন!',
   shop: 'fb.com/dreamfashion.bd — Guess ব্যাগ ১২০০! অগ্রিম বিকাশ করুন',
+};
+
+/** Line icons (feather-style) matching the app's circle-box buttons — no emojis. */
+const ICO = {
+  className: 'sh-ico',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 2,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  viewBox: '0 0 24 24',
+  width: 26,
+  height: 26,
+} as const;
+
+const ICONS: Record<string, ReactNode> = {
+  back: (<svg {...ICO} width={20} height={20}><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></svg>),
+  check: (<svg {...ICO}><path d="M12 2l8 3v6c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V5l8-3z" /><path d="M9 12l2 2 4-4" /></svg>),
+  radar: (<svg {...ICO}><circle cx="12" cy="12" r="2" /><path d="M12 12l7-7" /><path d="M12 2a10 10 0 019.54 7" /><path d="M12 6a6 6 0 015.66 4" /></svg>),
+  stats: (<svg {...ICO}><path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M2 20h20" /></svg>),
+  scale: (<svg {...ICO}><path d="M12 3v18" /><path d="M5 7l7-4 7 4" /><path d="M5 7l-3 7a3.5 3.5 0 007 0L5 7z" /><path d="M19 7l-3 7a3.5 3.5 0 007 0l-4-7z" /></svg>),
+  offer: (<svg {...ICO} width={22} height={22}><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2" /></svg>),
+  number: (<svg {...ICO} width={22} height={22}><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012.1 4.2 2 2 0 014.1 2h3a2 2 0 012 1.7c.13.96.36 1.9.7 2.8a2 2 0 01-.45 2.1L8.1 9.9a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.45c.9.34 1.84.57 2.8.7A2 2 0 0122 16.9z" /></svg>),
+  app: (<svg {...ICO} width={22} height={22}><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M12 18h.01" /></svg>),
+  shop: (<svg {...ICO} width={22} height={22}><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" /><path d="M3 6h18" /><path d="M16 10a4 4 0 01-8 0" /></svg>),
 };
 
 const VERDICT_META: Record<string, { badge: string; cls: string; icon: string }> = {
@@ -114,9 +139,12 @@ function CheckTab({ signedIn, initialInput }: { signedIn: boolean; initialInput?
           placeholder="এখানে paste করো… (Telegram offer, phone number, app নাম, shop link)"
           rows={3}
         />
-        <div className="sh-chips">
-          {Object.entries({ offer: '💼 Offer', number: '📞 Number', app: '📱 App', shop: '🛍️ Shop' }).map(([k, label]) => (
-            <button key={k} type="button" className="sh-chip" onClick={() => setInput(SAMPLES[k])}>{label}</button>
+        <div className="sh-cchips">
+          {(['offer', 'number', 'app', 'shop'] as const).map((k) => (
+            <button key={k} type="button" className="sh-cchip" onClick={() => setInput(SAMPLES[k])}>
+              <span className="sh-cc">{ICONS[k]}</span>
+              <small>{k === 'offer' ? 'Offer' : k === 'number' ? 'Number' : k === 'app' ? 'App' : 'Shop'}</small>
+            </button>
           ))}
         </div>
         <button type="button" className="sh-checkbtn" disabled={busy || !input.trim()} onClick={() => void run()}>
@@ -292,11 +320,11 @@ function WatchdogTab({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'check', label: 'যাচাই', icon: '🛡️' },
-  { id: 'radar', label: 'রাডার', icon: '📡' },
-  { id: 'shield', label: 'শিল্ড', icon: '📊' },
-  { id: 'watchdog', label: 'ওয়াচডগ', icon: '⚖️' },
+const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
+  { id: 'check', label: 'যাচাই', icon: ICONS.check },
+  { id: 'radar', label: 'রাডার', icon: ICONS.radar },
+  { id: 'shield', label: 'শিল্ড', icon: ICONS.stats },
+  { id: 'watchdog', label: 'ওয়াচডগ', icon: ICONS.scale },
 ];
 
 export default function ShieldPage({ signedIn, initialTab, initialInput }: { signedIn: boolean; initialTab?: Tab; initialInput?: string }) {
@@ -304,13 +332,15 @@ export default function ShieldPage({ signedIn, initialTab, initialInput }: { sig
   return (
     <div className="page sh-page">
       <header className="sh-hero">
+        <a className="sh-back" href="#/" aria-label="পেছনে">{ICONS.back}</a>
         <p className="sh-kicker">ANTI-SCAM SHIELD</p>
         <h1>ঠকার <span className="sh-gold">আগে</span> যাচাই করো</h1>
       </header>
-      <nav className="sh-tabs" aria-label="Shield sections">
+      <nav className="sh-ctabs" aria-label="Shield sections">
         {TABS.map((t) => (
-          <button key={t.id} type="button" className={`sh-tab${tab === t.id ? ' on' : ''}`} onClick={() => setTab(t.id)}>
-            <span>{t.icon}</span>{t.label}
+          <button key={t.id} type="button" className={`sh-ctab${tab === t.id ? ' on' : ''}`} onClick={() => setTab(t.id)}>
+            <span className="sh-cc">{t.icon}</span>
+            <small>{t.label}</small>
           </button>
         ))}
       </nav>

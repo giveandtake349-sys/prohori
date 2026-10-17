@@ -338,8 +338,11 @@ function Shell() {
     page = <HomePage signedIn={signedIn} initialCategory={routeQuery.get('category') ?? ''} profile={profile} />;
   }
 
+  const isShieldFull = routeBase === '/shield';
+
   return (
     <div className="app-frame">
+      {!isShieldFull && (
       <nav className="topbar">
         <a className="topbar-brand" href="#/">
           <img src="/prohori-logo.webp" alt="প্রহরী" />
@@ -358,9 +361,10 @@ function Shell() {
           ) : <a className="login-link" href="#/login">Login / Sign up</a>}
         </div>
       </nav>
+      )}
       {page}
       {showTour && signedIn && <OnboardingTour onDone={() => setShowTour(false)} />}
-      <footer className="site-footer">Prohori MVP • জরুরি বিপদে ৯৯৯-এ কল করুন।</footer>
+      {!isShieldFull && <footer className="site-footer">Prohori MVP • জরুরি বিপদে ৯৯৯-এ কল করুন।</footer>}
     </div>
   );
 }

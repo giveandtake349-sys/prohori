@@ -221,18 +221,14 @@ function ReportCard({ report, signedIn, reload }: { report: FeedReport; signedIn
   );
 }
 
-/** V20: compact shield check hero on home — links to full #/shield. */
+/** V20: compact shield check hero on home — tap anywhere to open full #/shield. */
 function ShieldHeroBox() {
-  const [input, setInput] = useState('');
+  const go = () => { window.location.hash = '#/shield'; };
   return (
-    <div className="sh-home-box">
-      <input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Offer / number / app / shop link paste করো…"
-        aria-label="যাচাই করার জন্য paste করো"
-      />
-      <a className="sh-home-btn" href={`#/shield${input.trim() ? `?q=${encodeURIComponent(input.trim())}` : ''}`}>🛡️ যাচাই</a>
+    <div className="sh-home-box" onClick={go} role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') go(); }} aria-label="Shield খোলো">
+      <span className="sh-home-fake">Offer / number / app / shop link paste করো…</span>
+      <span className="sh-home-btn">🛡️ যাচাই</span>
     </div>
   );
 }

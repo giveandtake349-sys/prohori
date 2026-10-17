@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { and, desc, eq, gte, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, gte, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { requireAuth, requireModerator } from '../auth.js';
 import { validateBody } from '../validate.js';
@@ -238,6 +238,8 @@ shieldRouter.get('/radar', async (_req: Request, res: Response, next: NextFuncti
             gte(scamEntities.verifiedAt, sql`now() - interval '30 days'`),
             gte(scamEntities.createdAt, sql`now() - interval '30 days'`),
           ),
+          // only entities with real user activity — no zero-report clutter
+          or(gt(scamEntities.reportCount, 0), gt(scamEntities.confirmCount, 0)),
         ),
       )
       .orderBy(desc(scamEntities.confirmCount), desc(scamEntities.reportCount))
